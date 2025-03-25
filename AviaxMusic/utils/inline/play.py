@@ -117,7 +117,7 @@ def stream_markup(_, chat_id):
         ],
         [
             InlineKeyboardButton(
-                text="🎬 Get Direct Movie 🎬",
+                text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
         ],
@@ -145,7 +145,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🎬 Get Direct Movie 🎬",
+                text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
         ],
@@ -169,7 +169,7 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🎬 Get Direct Movie 🎬",
+                text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
         ],
@@ -212,7 +212,7 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🎬 Get Direct Movie 🎬",
+                text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
         ],
