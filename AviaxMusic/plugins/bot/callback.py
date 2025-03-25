@@ -22,6 +22,30 @@ More games coming soon! Choose a game to start playing.
         print(e)
         await query.answer("Error occurred! Try again later.", show_alert=True)
 
+@app.on_callback_query(filters.regex("get_movie"))
+async def get_movie_callback(_, query: CallbackQuery):
+    try:
+        await query.message.reply_text(
+            """
+🎬 **Welcome to Movie Zone!**
+
+Join our movie Group to get:
+• Latest Movies
+• Web Series
+• And much more!
+
+📺 Join Now: @LB_Movies
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🍿 Join Movie Channel 🍿", url="https://t.me/LB_Movies")],
+                [InlineKeyboardButton("❌ Close", callback_data="close")]
+            ])
+        )
+        await query.answer()
+    except Exception as e:
+        print(e)
+        await query.answer("Error occurred! Try again later.", show_alert=True)
+
 @app.on_callback_query(filters.regex("start_hangman"))
 async def start_hangman_callback(_, query: CallbackQuery):
     try:
