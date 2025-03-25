@@ -194,7 +194,7 @@ def enhance_thumbnail(image):
 async def gen_thumb(videoid: str):
     try:
         # Check cache first to avoid reprocessing
-        cache_path = f"cache/{videoid}_v4.png"
+        cache_path = f"cache/{videoid}_v5.png"
         if os.path.isfile(cache_path):
             # Update timestamp in cache for LRU implementation
             if videoid in processed_cache:
@@ -217,10 +217,10 @@ async def gen_thumb(videoid: str):
             if os.path.exists(icon_path):
                 icon = Image.open(icon_path)
                 # Make circular icon with enhanced border
-                icon_size = 320  # Increased size for better visibility
+                icon_size = 360  # Larger icon size for better visibility
                 icon = crop_center_circle(icon, icon_size)
-                # Center the icon
-                background.paste(icon, (480, 160), icon)  # Adjusted position
+                # Center the icon (adjusted position to be higher up)
+                background.paste(icon, (int((1280-icon_size)/2), int((720-icon_size)/2)-50), icon)
             
             # Add enhanced green boundary
             background = add_green_boundary(background)
@@ -314,40 +314,51 @@ async def gen_thumb(videoid: str):
             # Add a green boundary
             background = add_green_boundary(background)
             
-            # Load logo for the profile pic
+            # Use a larger portion of the screen for the image by reducing text area
+            # Load logo for the profile pic - make it smaller and move it to top-left corner
             logo = "assets/logo.png"
             if os.path.exists(logo):
-                circle_logo = crop_center_circle(Image.open(logo), 160)  # Decreased size
-                # Position in the bottom-left corner with padding
-                background.paste(circle_logo, (70, 480), circle_logo)  # Adjusted position
+                circle_logo = crop_center_circle(Image.open(logo), 120)  # Smaller size
+                # Position in the top-left corner with padding
+                background.paste(circle_logo, (40, 40), circle_logo)
             
             # Load fonts
             try:
                 font_file = "assets/font2.ttf"
                 font_file_bold = "assets/font2.ttf"
                 
-                # Add title text with shadow
-                title_font = ImageFont.truetype(font_file_bold, 38)  # Decreased font size
+                # Add title text with shadow - smaller and positioned better
+                title_font = ImageFont.truetype(font_file_bold, 34)  # Reduced font size
                 draw = ImageDraw.Draw(background)
                 
+                # Use a more compact layout for text to make image appear larger
                 title_lines = truncate(title)
-                y_position = 180  # Adjusted position
+                
+                # Position title at the top of the image for a more compact layout
+                y_position = 45
+                
+                # Add a semi-transparent overlay just for the text area in top right
+                text_overlay = Image.new("RGBA", (600, 130), (0, 0, 0, 180))
+                background.paste(text_overlay, (640, 20), text_overlay)
+                
+                # Title alignment to the right side
+                x_position = 680
                 
                 for line in title_lines:
                     if line:
                         # Add text shadow for readability
                         draw_text_with_shadow(
                             background, draw, 
-                            (340, y_position),  # Adjusted position to make image appear larger
+                            (x_position, y_position),
                             line, title_font, "white"
                         )
-                        y_position += 55
+                        y_position += 45
                 
                 # Add duration text
-                duration_font = ImageFont.truetype(font_file, 28)  # Decreased font size
+                duration_font = ImageFont.truetype(font_file, 26)  # Smaller font
                 draw_text_with_shadow(
                     background, draw, 
-                    (340, y_position + 15),  # Adjusted position
+                    (x_position, y_position + 5),
                     f"Duration: {duration}", duration_font, "white"
                 )
                 
