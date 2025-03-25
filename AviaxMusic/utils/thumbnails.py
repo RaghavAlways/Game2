@@ -74,8 +74,8 @@ def add_border(image, border_width, border_color):
     new_image.paste(image, (border_width, border_width))
     return new_image
 
-def crop_center_circle(img, output_size, border_width=4):
-    """Create a circular thumbnail with white border"""
+def crop_center_circle(img, output_size, border_width=10):
+    """Create a circular thumbnail with enhanced white border and glow effect"""
     # Convert and resize image
     img = img.convert("RGBA")
     
@@ -83,18 +83,25 @@ def crop_center_circle(img, output_size, border_width=4):
     total_size = output_size
     inner_size = output_size - (border_width * 2)
     
-    # Create mask for outer white circle
+    # Create mask for outer white circle with glow
     mask_outer = Image.new('L', (total_size, total_size), 0)
     mask_draw = ImageDraw.Draw(mask_outer)
-    mask_draw.ellipse((0, 0, total_size, total_size), fill=255)
+    
+    # Draw multiple circles for enhanced glow effect
+    for i in range(4):
+        mask_draw.ellipse(
+            (i, i, total_size - i, total_size - i),
+            fill=255 - (i * 30)
+        )
     
     # Create mask for inner circle
     mask_inner = Image.new('L', (inner_size, inner_size), 0)
     mask_draw_inner = ImageDraw.Draw(mask_inner)
     mask_draw_inner.ellipse((0, 0, inner_size, inner_size), fill=255)
     
-    # Create output image with white background
+    # Create output image with white background and glow
     output = Image.new('RGBA', (total_size, total_size), (255, 255, 255, 255))
+    output = output.filter(ImageFilter.GaussianBlur(radius=2))
     
     # Resize and crop input image
     img_resized = img.resize((inner_size, inner_size), Image.Resampling.LANCZOS)
@@ -124,28 +131,42 @@ def draw_text_with_shadow(background, draw, position, text, font, fill, shadow_o
     
     draw.text(position, text, font=font, fill=fill)
 
-def add_green_boundary(image, border_width=3, border_color=(0, 255, 0, 255)):
-    """Add a green boundary line to the image with a glow effect"""
+def add_green_boundary(image, border_width=6, border_color=(0, 255, 0, 255)):
+    """Add an enhanced green boundary line to the image with multiple glow layers"""
     width, height = image.size
     new_width = width + 2 * border_width
     new_height = height + 2 * border_width
     
-    # Create a new image with green border
+    # Create a new image with transparent background
     new_image = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
     
-    # Add glow effect
-    glow = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
-    glow_draw.rectangle([(0, 0), (new_width, new_height)], outline=border_color, width=border_width)
+    # Add multiple glow layers with increasing intensity
+    for i in range(4):
+        glow = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow)
+        glow_color = (0, 255, 0, 255 - (i * 40))  # Brighter green glow
+        glow_draw.rectangle(
+            [(i, i), (new_width - i, new_height - i)],
+            outline=glow_color,
+            width=border_width - i
+        )
+        # Apply stronger blur for outer layers
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=2 + i))
+        new_image = Image.alpha_composite(new_image, glow)
     
-    # Apply blur to create glow
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=2))
+    # Add white border for extra visibility
+    white_border = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
+    white_draw = ImageDraw.Draw(white_border)
+    white_draw.rectangle(
+        [(border_width//2, border_width//2),
+         (new_width - border_width//2, new_height - border_width//2)],
+        outline=(255, 255, 255, 200),
+        width=3
+    )
+    new_image = Image.alpha_composite(new_image, white_border)
     
     # Paste the original image
     new_image.paste(image, (border_width, border_width))
-    
-    # Composite with glow
-    new_image = Image.alpha_composite(new_image, glow)
     
     return new_image
 
@@ -197,42 +218,55 @@ async def gen_thumb(videoid: str):
         enhancer = ImageEnhance.Brightness(background)
         background = enhancer.enhance(0.6)
         
-        # Create circular thumbnail with white border
-        circle_thumbnail = crop_center_circle(youtube, 400, border_width=6)
+        # Create circular thumbnail with enhanced white border
+        circle_thumbnail = crop_center_circle(youtube, 400, border_width=10)
         circle_pos = (120, 160)
         
-        # Add green border with glow
-        bordered_bg = Image.new('RGBA', (1280 + 10, 720 + 10), (0, 0, 0, 0))
+        # Add enhanced green border with glow
+        bordered_bg = Image.new('RGBA', (1280 + 12, 720 + 12), (0, 0, 0, 0))
         border_draw = ImageDraw.Draw(bordered_bg)
         
-        # Draw glowing border
-        for offset in range(3):
+        # Draw multiple glowing borders
+        for offset in range(5):
             border_draw.rectangle(
-                [(offset, offset), (1280 + 10 - offset, 720 + 10 - offset)],
-                outline=(0, 255, 0, 100 - offset * 30),
+                [(offset, offset), (1280 + 12 - offset, 720 + 12 - offset)],
+                outline=(0, 255, 0, 200 - offset * 35),
                 width=3
             )
         
+        # Add white border for extra visibility
+        border_draw.rectangle(
+            [(2, 2), (1280 + 10, 720 + 10)],
+            outline=(255, 255, 255, 200),
+            width=2
+        )
+        
         # Paste background
-        bordered_bg.paste(background, (5, 5))
+        bordered_bg.paste(background, (6, 6))
+        
+        # Add glow effect to circular thumbnail
+        glow_layer = Image.new('RGBA', bordered_bg.size, (0, 0, 0, 0))
+        glow_layer.paste(circle_thumbnail, circle_pos, circle_thumbnail)
+        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(3))
+        bordered_bg = Image.alpha_composite(bordered_bg, glow_layer)
         
         # Paste circular thumbnail
         bordered_bg.paste(circle_thumbnail, circle_pos, circle_thumbnail)
         
-        # Add text
+        # Add text with enhanced visibility
         draw = ImageDraw.Draw(bordered_bg)
         font = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 40)
         font2 = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 70)
         
-        # Draw title
+        # Draw title with shadow
         title1 = truncate(title)
-        draw.text((480, 180), title1[0], fill='white', font=font2)
+        draw_text_with_shadow(bordered_bg, draw, (480, 180), title1[0], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
         if title1[1]:
-            draw.text((480, 280), title1[1], fill='white', font=font2)
-            
-        # Draw duration
+            draw_text_with_shadow(bordered_bg, draw, (480, 280), title1[1], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
+        
+        # Draw duration with shadow
         if duration != "Live":
-            draw.text((480, 380), duration, fill='white', font=font)
+            draw_text_with_shadow(bordered_bg, draw, (480, 380), duration, font, 'white', shadow_offset=(2, 2), shadow_blur=5)
         
         bordered_bg = bordered_bg.convert("RGB")
         bordered_bg.save(f"cache/{videoid}_v4.png", optimize=True, quality=95)

@@ -1,114 +1,171 @@
 from pyrogram import filters
 from pyrogram.types import Message
-from pyrogram.errors import ChatWriteForbidden
+from pyrogram.errors import ChatWriteForbidden, ChatAdminRequired
 
 import config
 from AviaxMusic import app
 from AviaxMusic.logging import LOGGER
+from AviaxMusic.misc import SUDOERS
+from AviaxMusic.utils.database import get_cmode
+from config import LOGGER_ID
 
-@app.on_message(filters.new_chat_members, group=5)
-async def on_new_chat_members(_, message: Message):
-    """Handler for when bot is added to a new group"""
+async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
+    """Send messages to the logger group"""
+    if not LOGGER_ID:
+        return
+    
     try:
-        # Check if the bot was added
-        if message.new_chat_members:
-            for member in message.new_chat_members:
-                if member.id == app.id:
-                    LOGGER(__name__).info(f"Bot added to {message.chat.title} ({message.chat.id})")
-                    # Log the event to LOG_GROUP_ID
-                    try:
-                        log_message = (
-                            "✨ <b>Bot Added to New Group</b>\n\n"
-                            f"📮 <b>Group:</b> {message.chat.title}\n"
-                            f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
-                            f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
-                            f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
-                            f"🧑‍💼 <b>Added By:</b> {message.from_user.mention if message.from_user else 'Unknown'}\n"
-                            f"👤 <b>User ID:</b> <code>{message.from_user.id if message.from_user else 'Unknown'}</code>"
-                        )
-                        await app.send_message(
-                            chat_id=config.LOG_GROUP_ID,
-                            text=log_message,
-                            disable_web_page_preview=True
-                        )
-                    except Exception as e:
-                        LOGGER(__name__).error(f"Failed to send log message: {str(e)}")
-                    
-                    # Send welcome message in the group
-                    welcome_message = (
-                        "👋 Thanks for adding me!\n\n"
-                        "🎵 I'm a powerful music bot with many features.\n"
-                        "🔰 To see my commands, type /help\n\n"
-                        "⚡️ Make me admin to use my full potential!"
-                    )
-                    try:
-                        await message.reply_text(welcome_message)
-                    except ChatWriteForbidden:
-                        LOGGER(__name__).warning(f"Can't send welcome message in {message.chat.id}")
-                    except Exception as e:
-                        LOGGER(__name__).error(f"Error sending welcome message: {str(e)}")
-                    break
+        await app.send_message(
+            chat_id=LOGGER_ID,
+            text=f"""
+🔔 **{alert_type} Alert**
+
+{message}
+""",
+            disable_web_page_preview=True
+        )
+    except (ChatWriteForbidden, ChatAdminRequired):
+        print(f"Error: Bot doesn't have permission to write in LOGGER_ID ({LOGGER_ID})")
     except Exception as e:
-        LOGGER(__name__).error(f"Error in new chat members handler: {str(e)}")
+        print(f"Error sending to logger: {str(e)}")
 
-# Log when bot is removed from a group
-@app.on_message(filters.left_chat_member, group=5)
-async def on_left_chat_member(_, message: Message):
-    """Handler for when bot is removed from a group"""
-    try:
-        # Check if the removed member is our bot
-        if message.left_chat_member and message.left_chat_member.id == app.id:
-            LOGGER(__name__).info(f"Bot removed from {message.chat.title} ({message.chat.id})")
+@app.on_message(filters.new_chat_members, group=2)
+async def welcome_message(_, message: Message):
+    chat_id = message.chat.id
+    
+    # Check if bot was added
+    for member in message.new_chat_members:
+        if member.id == app.id:
             try:
-                # Get user info who removed the bot
-                user = message.from_user
-                user_info = ""
-                if user:
-                    user_info = (
-                        f"👤 <b>Removed By:</b> {user.mention}\n"
-                        f"🆔 <b>User ID:</b> <code>{user.id}</code>\n"
-                        f"📝 <b>Username:</b> @{user.username or 'None'}\n"
-                        f"📱 <b>First Name:</b> {user.first_name}\n"
-                        f"📱 <b>Last Name:</b> {user.last_name or 'None'}"
-                    )
-                else:
-                    user_info = "👤 <b>Removed By:</b> Unknown User"
+                # Get chat details
+                chat = message.chat
+                chat_title = chat.title
+                chat_username = f"@{chat.username}" if chat.username else "Private Group"
+                member_count = await app.get_chat_members_count(chat_id)
+                
+                # Get who added the bot
+                added_by = message.from_user
+                added_by_name = added_by.first_name
+                added_by_mention = added_by.mention
+                added_by_id = added_by.id
+                
+                # Send welcome message
+                welcome_text = f"""
+👋 Thanks for adding me to:
+📝 **Group:** {chat_title}
+🔗 **Group Link:** {chat_username}
+👥 **Members:** {member_count}
 
-                # Get group info
-                group_info = (
-                    f"📮 <b>Group:</b> {message.chat.title}\n"
-                    f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
-                    f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
-                    f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}"
-                )
-
-                log_message = (
-                    "❌ <b>Bot Removed from Group</b>\n\n"
-                    f"{group_info}\n\n"
-                    f"{user_info}"
-                )
-
-                # Send log message
+Added by:
+👤 **Name:** {added_by_name}
+🆔 **ID:** `{added_by_id}`
+"""
                 try:
-                    await app.send_message(
-                        chat_id=config.LOG_GROUP_ID,
-                        text=log_message,
-                        disable_web_page_preview=True
-                    )
-                    LOGGER(__name__).info(f"Successfully sent removal log message for group {message.chat.id}")
-                except Exception as e:
-                    LOGGER(__name__).error(f"Failed to send removal log message: {str(e)}")
-                    # Try alternative method if the first one fails
-                    try:
-                        await app.send_message(
-                            chat_id=config.LOG_GROUP_ID,
-                            text=f"❌ Bot was removed from group {message.chat.title} by {user.mention if user else 'Unknown User'}",
-                            disable_web_page_preview=True
-                        )
-                    except Exception as e2:
-                        LOGGER(__name__).error(f"Failed to send alternative log message: {str(e2)}")
+                    await message.reply_text(welcome_text)
+                except ChatWriteForbidden:
+                    print(f"Can't send welcome message in {chat_id}")
+                
+                # Log to logger group
+                log_message = f"""
+✅ **Bot Added to New Group**
 
+📮 **Group Details:**
+• Name: {chat_title}
+• ID: `{chat_id}`
+• Link: {chat_username}
+• Members: {member_count}
+
+👤 **Added By:**
+• Name: {added_by_name}
+• ID: `{added_by_id}`
+• Mention: {added_by_mention}
+"""
+                await send_to_logger(log_message, "NEW GROUP")
+                
             except Exception as e:
-                LOGGER(__name__).error(f"Error processing removal log: {str(e)}")
+                print(f"Error in welcome_message: {str(e)}")
+                await send_to_logger(
+                    f"⚠️ Error in welcome_message for {chat_id}: {str(e)}",
+                    "ERROR"
+                )
+
+@app.on_message(filters.left_chat_member, group=2)
+async def on_left_chat_member(_, message: Message):
+    chat_id = message.chat.id
+    
+    # Check if bot was removed
+    if message.left_chat_member.id == app.id:
+        try:
+            # Get chat details
+            chat = message.chat
+            chat_title = chat.title
+            chat_username = f"@{chat.username}" if chat.username else "Private Group"
+            member_count = await app.get_chat_members_count(chat_id)
+            
+            # Get who removed the bot
+            removed_by = message.from_user
+            removed_by_name = removed_by.first_name if removed_by else "Unknown"
+            removed_by_mention = removed_by.mention if removed_by else "Unknown"
+            removed_by_id = removed_by.id if removed_by else "Unknown"
+            
+            # Log to logger group
+            log_message = f"""
+❌ **Bot Removed from Group**
+
+📮 **Group Details:**
+• Name: {chat_title}
+• ID: `{chat_id}`
+• Link: {chat_username}
+• Members: {member_count}
+
+👤 **Removed By:**
+• Name: {removed_by_name}
+• ID: `{removed_by_id}`
+• Mention: {removed_by_mention}
+"""
+            await send_to_logger(log_message, "REMOVED")
+            
+        except Exception as e:
+            print(f"Error in on_left_chat_member: {str(e)}")
+            await send_to_logger(
+                f"⚠️ Error in on_left_chat_member for {chat_id}: {str(e)}",
+                "ERROR"
+            )
+
+@app.on_message(filters.command("logger") & SUDOERS)
+async def logger_info(_, message: Message):
+    """Command to check logger status and ID"""
+    if not LOGGER_ID:
+        await message.reply_text("❌ No LOGGER_ID configured in config.")
+        return
+        
+    try:
+        chat = await app.get_chat(LOGGER_ID)
+        await message.reply_text(f"""
+✅ **Logger Information**
+
+📮 **Chat Details:**
+• Title: {chat.title}
+• ID: `{chat.id}`
+• Type: {chat.type}
+• Username: @{chat.username if chat.username else 'None'}
+
+Bot's Permissions:
+• Can Send Messages: ✅
+""")
+    except ChatAdminRequired:
+        await message.reply_text(f"""
+⚠️ **Logger Error**
+
+The bot is not admin in the logger group (ID: `{LOGGER_ID}`).
+Please add the bot as admin with permission to send messages.
+""")
     except Exception as e:
-        LOGGER(__name__).error(f"Error in left chat member handler: {str(e)}") 
+        await message.reply_text(f"""
+❌ **Logger Error**
+
+Failed to get logger group info:
+`{str(e)}`
+
+Current LOGGER_ID: `{LOGGER_ID}`
+""") 
