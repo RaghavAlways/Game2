@@ -106,10 +106,16 @@ async def create_game_message(chat_id: int) -> str:
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     remaining_letters = "".join([letter for letter in alphabet if letter not in used_letters])
     
+    # Format remaining letters with spaces for better readability
+    formatted_letters = " ".join(list(remaining_letters))
+    
+    # Format blanks for word with proper spacing
+    word_blanks = " ".join(["_"] * len(word))
+    
     return f"""
 🎮 **Wordle Game**
 
-Word: `{len(word) * '_ '}` ({len(word)} letters)
+Word: `{word_blanks}` ({len(word)} letters)
 Attempts: {len(attempts)}/{max_attempts}
 Remaining: {remaining} guesses{current_player_text}
 
@@ -117,7 +123,7 @@ Remaining: {remaining} guesses{current_player_text}
 {attempts_text if attempts else "No attempts yet"}
 
 **Available Letters:**
-`{' '.join(remaining_letters)}`
+`{formatted_letters}`
 
 **Players:**
 {players_text}
@@ -168,7 +174,10 @@ async def start_wordle(_, message: Message):
         "start_time": int(time.time())  # Track game start time
     }
     
-    # Send initial game message
+    # Generate game status message first
+    status_message = await create_game_message(chat_id)
+    
+    # Send initial game message with clear separation
     game_message = await message.reply_text(
         f"""
 🎮 **New Wordle Game Started!**
@@ -184,7 +193,8 @@ Word length: **5 letters**
 4. The first person to guess the word correctly wins.
 
 To make a guess, send: `/guess WORD`
-{await create_game_message(chat_id)}
+
+{status_message}
 """,
         reply_markup=InlineKeyboardMarkup([
             [
@@ -541,12 +551,12 @@ async def join_wordle_callback(_, query: CallbackQuery):
         
         # Check if there's a game in progress
         if chat_id not in active_games:
-            await query.answer("No game in progress. Start a new game with /wordle", show_alert=True)
+            await query.answer("No active game found. Start a new game with /wordle", show_alert=True)
             return
         
         # Check if user is already a player
         if user_id in active_games[chat_id]["players"]:
-            await query.answer("You are already in the game!", show_alert=True)
+            await query.answer("You're already part of this game!", show_alert=True)
             return
         
         # Add user to players
@@ -555,16 +565,14 @@ async def join_wordle_callback(_, query: CallbackQuery):
         # Get player name
         player_name = query.from_user.first_name
         
-        # Answer the callback
-        await query.answer(f"Welcome to the game, {player_name}!", show_alert=True)
-        
         # Update game message
         try:
-            message_id = active_games[chat_id].get("message_id")
-            if message_id:
-                updated_message = await create_game_message(chat_id)
-                await query.message.edit_text(
-                    f"""
+            # Get updated game status with the new player
+            updated_message = await create_game_message(chat_id)
+            
+            # Edit the message to reflect new player joining
+            await query.message.edit_text(
+                f"""
 🎮 **Wordle Game in Progress**
 Word length: **5 letters**
 
@@ -576,16 +584,30 @@ Word length: **5 letters**
    - 🟥 - Letter not in the word.
 3. The game will run until the word is found or a maximum of 30 guesses are reached.
 
+💡 {player_name} has joined the game!
+
 To make a guess, send: `/guess WORD`
+
 {updated_message}
 """,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                        [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                    ])
-                )
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
+                        InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
+                    ],
+                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                ])
+            )
+            
+            # Show confirmation to user
+            await query.answer(f"You've joined the game! When it's your turn, use /guess WORD to play.", show_alert=True)
+            
+            # Also send a separate notification message for better visibility
+            await query.message.reply_text(f"**{player_name}** has joined the Wordle game!")
+            
         except Exception as e:
-            print(f"Error updating game message: {e}")
+            print(f"Error updating game message after joining: {e}")
+            await query.answer("Joined the game, but couldn't update message.", show_alert=True)
             
     except Exception as e:
         print(f"Error in join_wordle callback: {e}")
@@ -712,10 +734,11 @@ async def wordle_hint_callback(_, query: CallbackQuery):
             await query.answer("No active game found. Start one with /wordle", show_alert=True)
             return
         
-        # Check if user is in the game
+        # Allow anyone to use hints without joining first (more user-friendly)
         if user_id not in active_games[chat_id]["players"]:
-            await query.answer("You need to join the game first to get hints!", show_alert=True)
-            return
+            # Auto-join the user when they request a hint
+            active_games[chat_id]["players"][user_id] = 0
+            await query.answer("You've been added to the game!", show_alert=True)
         
         # Limit hints to 3 per game
         if active_games[chat_id].get("hints_used", 0) >= 3:
@@ -726,42 +749,89 @@ async def wordle_hint_callback(_, query: CallbackQuery):
         word = active_games[chat_id]["word"]
         attempts = active_games[chat_id]["attempts"]
         
-        if not attempts:
-            # First hint - just give the first letter
+        # Extended hint map with more common words
+        hint_map = {
+            "APPLE": "A common fruit that keeps the doctor away",
+            "EARTH": "The planet we live on",
+            "MUSIC": "Something you listen to that has rhythm and melody",
+            "WATER": "Essential liquid for life",
+            "DANCE": "Moving your body to music",
+            "LIGHT": "The opposite of darkness",
+            "HOUSE": "A place where people live",
+            "DREAM": "What you see when you sleep",
+            "HEART": "It pumps blood through your body",
+            "BEACH": "Sandy shore by the ocean",
+            "MOVIE": "Entertainment on a big screen",
+            "SMILE": "Happy facial expression",
+            "TIGER": "A large striped wild cat",
+            "CLOUD": "White fluffy thing in the sky",
+            "BRAIN": "Organ used for thinking",
+            "PHONE": "Device used to call people",
+            "HAPPY": "Feeling joy or pleasure",
+            "GREEN": "The color of grass",
+            "WORLD": "The planet we all live on",
+            "PLANT": "Living organism that grows in soil",
+            "RIVER": "Flowing body of water",
+            "TABLE": "Furniture with a flat top and legs",
+            "SWEET": "Taste like sugar",
+            "BLOOD": "Red fluid in your veins",
+            "BREAD": "Baked food made from flour",
+            "CHILD": "Young human",
+            "SPACE": "Area beyond Earth's atmosphere",
+            "GHOST": "Spooky spirit",
+            "STORM": "Weather with strong wind and rain",
+            "QUEEN": "Female ruler of a kingdom",
+            "MAGIC": "Supernatural powers",
+            "PAPER": "Material used for writing",
+            "METAL": "Strong materials like iron or gold",
+            "SHARE": "Give a portion to others",
+            "COLOR": "Visual property like red or blue",
+            "MONEY": "Currency used to buy things",
+        }
+        
+        # Determine hint type based on hints used so far
+        hints_used = active_games[chat_id].get("hints_used", 0)
+        
+        if hints_used == 0:
+            # First hint - reveal the first letter
             hint = f"The word starts with '{word[0]}'"
-        elif len(attempts) == 1:
-            # Second hint - give another letter position
-            # Try to find a position where no one has guessed correctly yet
-            correct_positions = set()
-            for attempt in attempts:
-                for i, letter in enumerate(attempt):
-                    if letter == word[i]:
-                        correct_positions.add(i)
-            
-            # Find a position that hasn't been guessed correctly yet
-            available_positions = [i for i in range(len(word)) if i not in correct_positions and i != 0]
-            
-            if available_positions:
-                pos = random.choice(available_positions)
-                hint = f"The letter at position {pos+1} is '{word[pos]}'"
+        elif hints_used == 1:
+            # Second hint - give another letter position or definition hint
+            if word in hint_map:
+                # If we have a definition, use it
+                hint = hint_map[word]
             else:
-                # If all positions have been guessed correctly (unlikely), give a different type of hint
-                hint = f"The word ends with '{word[-1]}'"
+                # Otherwise give a letter position hint
+                letter_pos = random.randint(1, len(word)-1)  # Not the first letter
+                hint = f"The letter at position {letter_pos+1} is '{word[letter_pos]}'"
         else:
-            # Third or later hint - give a more substantial hint
-            # Provide a definition or context for the word
-            hint_map = {
-                "APPLE": "A common fruit that keeps the doctor away",
-                "EARTH": "The planet we live on",
-                "MUSIC": "Something you listen to that has rhythm and melody",
-                "WATER": "Essential liquid for life",
-                # Add more hints for common words
-            }
-            
-            hint = hint_map.get(word, f"This word contains the letters: {', '.join(sorted(set(word[1:-1])))}")
+            # Third hint - more substantial 
+            if len(attempts) > 0:
+                # Analyze incorrect guesses to give more targeted hint
+                all_correct_positions = set()
+                for attempt in attempts:
+                    for i, letter in enumerate(attempt):
+                        if letter == word[i]:
+                            all_correct_positions.add(i)
+                
+                # Find a position not yet guessed correctly 
+                available_positions = [i for i in range(len(word)) if i not in all_correct_positions]
+                
+                if available_positions:
+                    pos = random.choice(available_positions)
+                    hint = f"The letter at position {pos+1} is '{word[pos]}'"
+                else:
+                    # All positions have been guessed correctly at some point
+                    # Give a scrambled version of the word minus any correctly placed letters
+                    letters = list(word)
+                    random.shuffle(letters)
+                    hint = f"The word contains these letters (scrambled): {''.join(letters)}"
+            else:
+                # No attempts yet, give the first two letters
+                hint = f"The word starts with '{word[0:2]}'"
         
         # Increment hints used
-        active_games[chat_id]["hints_used"] = active_games[chat_id].get("hints_used", 0) + 1
+        active_games[chat_id]["hints_used"] = hints_used + 1
         
         # Send the hint
         await query.answer(f"HINT: {hint}", show_alert=True)
@@ -769,6 +839,8 @@ async def wordle_hint_callback(_, query: CallbackQuery):
         # Update the game message to show that a hint was used
         try:
             updated_message = await create_game_message(chat_id)
+            hints_used = active_games[chat_id]["hints_used"]
+            
             await query.message.edit_text(
                 f"""
 🎮 **Wordle Game in Progress**
@@ -781,9 +853,10 @@ Word length: **5 letters**
    - 🟨 - Correct letter in the wrong spot.
    - 🟥 - Letter not in the word.
 
-💡 Hints used: {active_games[chat_id]["hints_used"]}/3
+💡 Hints used: {hints_used}/3 - Last hint: "{hint}"
 
 To make a guess, send: `/guess WORD`
+
 {updated_message}
 """,
                 reply_markup=InlineKeyboardMarkup([

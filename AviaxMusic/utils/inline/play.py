@@ -34,7 +34,7 @@ def track_markup(_, videoid, user_id, channel, fplay):
         [
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
             InlineKeyboardButton(
                 text="🎬 Get Direct Movie 🎬",
@@ -83,7 +83,7 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
             ),
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
         ],
     ]
@@ -122,7 +122,7 @@ def telegram_markup_timer(_, chat_id, played, dur):
             ),
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
         ],
     ]
