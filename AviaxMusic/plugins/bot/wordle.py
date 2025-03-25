@@ -57,7 +57,7 @@ async def get_user_name(chat_id: int, user_id: int) -> str:
         return "Unknown User"
 
 async def create_game_message(chat_id, available_letters=None, extra_text="", hints_used=0):
-    """Create the game status message with the current game state"""
+    """Create a concise game status message"""
     game_data = active_games.get(chat_id, {})
     
     # Update last activity timestamp
@@ -71,65 +71,63 @@ async def create_game_message(chat_id, available_letters=None, extra_text="", hi
     players = game_data.get("players", {})
     
     if not available_letters:
-        available_letters = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        available_letters = sorted(list(set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") - set(
+            letter for attempt in attempts for letter in attempt
+        )))
     
-    # Format the word display with proper spacing - show only guessed letters
-    displayed_word = ""
-    for char in word:
-        if char.upper() in game_data.get("correct_letters", set()):
-            displayed_word += f" {char.upper()} "
-        else:
-            displayed_word += " _ "
-    
-    # Format available letters with better spacing
+    # Format available letters compactly
     letters_display = ""
-    for idx, letter in enumerate(available_letters):
-        letters_display += f" {letter} "
-        if (idx + 1) % 7 == 0 and idx < len(available_letters) - 1:
-            letters_display += "\n"
+    for i, chunk in enumerate([available_letters[i:i+7] for i in range(0, len(available_letters), 7)]):
+        letters_display += "".join(chunk)
+        if i < (len(available_letters) - 1) // 7:
+            letters_display += " "
     
-    # Create the game status message
+    # Format the word display compactly
+    correct_letters = game_data.get("correct_letters", set())
+    displayed_word = "".join([char.upper() if char.upper() in correct_letters else "_" for char in word])
+    
+    # Create the concise game status message
     message = (
-        f"🎮 **WORDLE GAME**\n\n"
-        f"Word: `{displayed_word.strip()}`\n\n"
-        f"Attempts: {len(attempts)}/6\n"
-        f"Players: {len(players)}\n"
-        f"Hints Used: {hints_used}/3\n\n"
-        f"Available Letters:\n`{letters_display}`\n\n"
+        f"🎮 **WORDLE**\n"
+        f"Word: `{displayed_word}`\n"
+        f"Tries: {len(attempts)}/6 • Players: {len(players)}\n"
     )
+    
+    if hints_used > 0:
+        message += f"Hints: {hints_used}/3\n"
     
     if extra_text:
-        message += f"{extra_text}\n\n"
+        message += f"{extra_text}\n"
     
-    message += (
-        "Make a guess with /guess [word]\n"
-        "For example: `/guess hello`"
-    )
+    if letters_display:
+        message += f"Letters: `{letters_display}`\n"
     
-    # Create the markup with join and hint buttons, add recovery button for admins
+    # Create compact markup
     markup = [
         [
-            InlineKeyboardButton("Join Game", callback_data="join_wordle"),
-            InlineKeyboardButton("Hint", callback_data="wordle_hint")
+            InlineKeyboardButton("Join", callback_data="join_wordle"),
+            InlineKeyboardButton("Hint", callback_data="wordle_hint"),
+            InlineKeyboardButton("Reset", callback_data="game_error_recovery")
         ]
     ]
-    
-    # Add the recovery button at the bottom
-    markup.append([InlineKeyboardButton("🔄 Reset Game (Admin)", callback_data="game_error_recovery")])
     
     return message, InlineKeyboardMarkup(markup)
 
 def check_word(guess: str, word: str) -> str:
     """Check guess against the word and return formatted result"""
     result = ""
+    correct_positions = set()  # Track positions of correct letters
+    
     for i, letter in enumerate(guess):
         if letter == word[i]:
             result += "🟩"  # Correct position
+            correct_positions.add(i)  # Record correct position
         elif letter in word:
             result += "🟨"  # In word but wrong position
         else:
             result += "🟥"  # Not in word
-    return result
+    
+    return result, correct_positions
 
 @app.on_message(filters.command("wordle") & filters.group)
 async def start_wordle(_, message: Message):
@@ -139,9 +137,9 @@ async def start_wordle(_, message: Message):
     # Check if there's already a game in this chat
     if chat_id in active_games:
         await message.reply_text(
-            "❗ A Wordle game is already in progress in this chat!",
+            "❗ Game already in progress!",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➡️ Show Game", callback_data="wordle_show")]
+                [InlineKeyboardButton("Show Game", callback_data="wordle_show")]
             ])
         )
         return
@@ -159,37 +157,25 @@ async def start_wordle(_, message: Message):
         "players": {user_id: 0},  # Initialize with the creator's score
         "current_player": user_id,  # First player is the creator
         "hints_used": 0,  # Track hints usage
-        "start_time": int(time.time())  # Track game start time
+        "start_time": int(time.time()),  # Track game start time
+        "correct_letters": set()  # Track correctly guessed letters
     }
     
-    # Generate game status message first
-    status_message = await create_game_message(chat_id)
-    
-    # Send initial game message with clear separation
+    # Send concise initial game message
     game_message = await message.reply_text(
         f"""
-🎮 **New Wordle Game Started!**
-Word length: **5 letters**
-
-**How to Play:**
-1. You have to guess a random 5-letter word.
-2. After each guess, you'll get hints:
-   - 🟩 - Correct letter in the right spot.
-   - 🟨 - Correct letter in the wrong spot.
-   - 🟥 - Letter not in the word.
-3. The game will run until the word is found or a maximum of 30 guesses are reached.
-4. The first person to guess the word correctly wins.
-
-To make a guess, send: `/guess WORD`
-
-{status_message}
+🎮 **Wordle Game Started!**
+• Guess the 5-letter word
+• 🟩 Right letter, right spot
+• 🟨 Right letter, wrong spot
+• 🟥 Letter not in word
+Use: `/guess WORD`
 """,
         reply_markup=InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
-                InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
-            ],
-            [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                InlineKeyboardButton("Join", callback_data="wordle_join"),
+                InlineKeyboardButton("Hint", callback_data="wordle_hint")
+            ]
         ])
     )
     
@@ -203,15 +189,15 @@ async def make_guess(_, message: Message):
     
     # Check if there's a game in progress
     if chat_id not in active_games:
-        await message.reply_text("❌ No Wordle game in progress. Start one with /wordle")
+        await message.reply_text("❌ No active game. Start with /wordle")
         return
     
     # Check if user is a player
     if user_id not in active_games[chat_id]["players"]:
         await message.reply_text(
-            "❌ You are not part of the game. Click 'Join Game' to participate.",
+            "❌ Join the game first",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")]
+                [InlineKeyboardButton("Join Game", callback_data="wordle_join")]
             ])
         )
         return
@@ -219,74 +205,60 @@ async def make_guess(_, message: Message):
     # Check if it's the user's turn
     if user_id != active_games[chat_id]["current_player"]:
         current_player_name = await get_user_name(chat_id, active_games[chat_id]["current_player"])
-        await message.reply_text(f"❌ It's not your turn. Wait for {current_player_name} to make a guess.")
+        await message.reply_text(f"❌ Not your turn. Wait for {current_player_name}.")
         return
     
     # Get the guess
     if len(message.command) < 2:
-        await message.reply_text("❗ Please provide a word with your guess: `/guess WORD`")
+        await message.reply_text("❗ Provide a word: `/guess WORD`")
         return
     
     guess = message.command[1].upper()
     
     # Validate guess is only letters
     if not re.match(r'^[A-Za-z]+$', guess):
-        await message.reply_text("❗ Your guess must contain only letters.")
+        await message.reply_text("❗ Only letters allowed")
         return
     
     # Validate guess length
     word = active_games[chat_id]["word"]
     if len(guess) != len(word):
-        await message.reply_text(f"❗ Your guess must be {len(word)} letters long.")
+        await message.reply_text(f"❗ Must be {len(word)} letters")
         return
     
     # Add the guess to attempts
     active_games[chat_id]["attempts"].append(guess)
+    
+    # Update correctly guessed letters and positions
+    result, correct_positions = check_word(guess, word)
+    
+    # Initialize correct_letters set if it doesn't exist
+    if "correct_letters" not in active_games[chat_id]:
+        active_games[chat_id]["correct_letters"] = set()
+    
+    # Update correct letters for display
+    for pos in correct_positions:
+        active_games[chat_id]["correct_letters"].add(word[pos])
     
     # Check if the guess is correct
     if guess == word:
         # Update player's score
         active_games[chat_id]["players"][user_id] += 10
         
-        # Format the final board
+        # Get attempt count
         attempts_count = len(active_games[chat_id]["attempts"])
         
-        # Sort players by score
-        sorted_players = sorted(
-            active_games[chat_id]["players"].items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )
-        
-        players_text = []
-        for i, (pid, score) in enumerate(sorted_players):
-            try:
-                player_name = await get_user_name(chat_id, pid)
-                medal = '🥇' if i==0 else '🥈' if i==1 else '🥉' if i==2 else '•'
-                players_text.append(f"{medal} {player_name}: {score}")
-            except Exception:
-                continue
-        
-        players_text_str = "\n".join(players_text)
-        
-        # Create winner message
+        # Create winner message (simplified)
         winner_message = f"""
-🎮 **Wordle Game Completed!**
-
-🎉 Congratulations! {message.from_user.first_name} guessed the word: **{word}**
+🎉 {message.from_user.first_name} guessed: **{word}**!
 ✅ Solved in {attempts_count} attempts
-
-**Final Leaderboard:**
-{players_text_str}
-
-**Play Again?** Use `/wordle` to start a new game!
 """
         
         # Send the winner message and clean up
         await message.reply_text(
             winner_message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+                [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
         )
         
@@ -312,33 +284,13 @@ async def make_guess(_, message: Message):
     
     # Check if max attempts reached
     if len(active_games[chat_id]["attempts"]) >= 30:
-        # Game over - no one guessed correctly
-        players_text = []
-        for pid, score in active_games[chat_id]["players"].items():
-            try:
-                player_name = await get_user_name(chat_id, pid)
-                players_text.append(f"• {player_name}: {score}")
-            except Exception:
-                continue
-                
-        players_text_str = "\n".join(players_text)
-        
-        game_over_message = f"""
-🎮 **Wordle Game Over!**
-
-❌ No one guessed the word: **{word}**
-Max attempts (30) reached.
-
-**Players:**
-{players_text_str}
-
-**Play Again?** Use `/wordle` to start a new game!
-"""
+        # Game over - no one guessed correctly (simplified)
+        game_over_message = f"❌ Game over! Word was: **{word}**"
         
         await message.reply_text(
             game_over_message,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+                [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
         )
         
@@ -350,20 +302,40 @@ Max attempts (30) reached.
             
         return
     
-    # Show updated game status
-    result = check_word(guess, word)
+    # Show updated game status (simplified)
+    next_player = await get_user_name(chat_id, active_games[chat_id]["current_player"])
+    
+    # Get remaining letters
+    used_letters = set()
+    for attempt in active_games[chat_id]["attempts"]:
+        for letter in attempt:
+            used_letters.add(letter)
+    remaining_letters = "".join(sorted([l for l in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if l not in used_letters]))
+    
+    # Format remaining letters in chunks of 7
+    formatted_letters = ""
+    for i in range(0, len(remaining_letters), 7):
+        formatted_letters += remaining_letters[i:i+7] + " "
+    
+    # Create compact progress display 
+    masked_word = "".join([letter if letter in active_games[chat_id]["correct_letters"] else "_" for letter in word.upper()])
+    
     game_message = f"""
-🔤 {message.from_user.first_name} guessed: **{guess}**
+🎲 {message.from_user.first_name}: **{guess}**
 {result}
 
-{await create_game_message(chat_id)}
+🎯 Word: `{masked_word}` ({len(active_games[chat_id]["attempts"])}/30)
+👤 Next: {next_player}
+🔤 Available: `{formatted_letters.strip()}`
 """
     
     await message.reply_text(
         game_message,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-            [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+            [
+                InlineKeyboardButton("Join", callback_data="wordle_join"),
+                InlineKeyboardButton("Hint", callback_data="wordle_hint")
+            ]
         ])
     )
 
@@ -376,16 +348,14 @@ async def wordle_callback(_, query: CallbackQuery):
     # Show game
     if data == "show":
         if chat_id not in active_games:
-            await query.answer("The game has ended or doesn't exist anymore.", show_alert=True)
+            await query.answer("Game has ended or doesn't exist.", show_alert=True)
             return
         
         try:
+            message, markup = await create_game_message(chat_id)
             await query.message.reply_text(
-                f"**Current Wordle Game:**\n\n{await create_game_message(chat_id)}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                ])
+                f"**Current Game:**\n\n{message}",
+                reply_markup=markup
             )
             await query.answer()
         except Exception as e:
@@ -395,7 +365,7 @@ async def wordle_callback(_, query: CallbackQuery):
     # Join game
     elif data == "join":
         if chat_id not in active_games:
-            await query.answer("The game has ended or doesn't exist anymore.", show_alert=True)
+            await query.answer("Game has ended or doesn't exist.", show_alert=True)
             return
         
         # Add user to players if not already in
@@ -407,24 +377,22 @@ async def wordle_callback(_, query: CallbackQuery):
                 active_games[chat_id]["current_player"] = user_id
             
             try:
-                await query.message.reply_text(
-                    f"**{query.from_user.first_name}** has joined the Wordle game!\n\n{await create_game_message(chat_id)}",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                        [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                    ])
-                )
-                await query.answer(f"You joined the game! When it's your turn, use /guess WORD to play.")
+                # Get updated game message
+                message, markup = await create_game_message(chat_id, extra_text=f"✅ {query.from_user.first_name} joined!")
+                
+                # Edit message
+                await query.message.edit_text(message, reply_markup=markup)
+                await query.answer("You joined! Use /guess WORD to play.")
             except Exception as e:
                 print(f"Error joining game: {e}")
-                await query.answer("Error joining game. Try again.", show_alert=True)
+                await query.answer("Error joining. Try again.", show_alert=True)
         else:
             await query.answer("You're already in the game!", show_alert=True)
     
     # End game
     elif data == "end":
         if chat_id not in active_games:
-            await query.answer("The game has already ended.", show_alert=True)
+            await query.answer("Game already ended.", show_alert=True)
             return
         
         # Check if user is in the game
@@ -434,28 +402,17 @@ async def wordle_callback(_, query: CallbackQuery):
         
         word = active_games[chat_id]["word"]
         
-        end_message = f"""
-🎮 **Wordle Game Ended!**
-
-The word was: **{word}**
-
-Game ended by: {query.from_user.first_name}
-"""
+        # Simplified end message
+        await query.message.edit_text(
+            f"🎮 **Game Ended!**\nWord was: **{word}**\nEnded by: {query.from_user.first_name}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("New Game", callback_data="wordle_start")]
+            ])
+        )
         
+        # Delete the game
         try:
-            await query.message.reply_text(
-                end_message,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
-                ])
-            )
-            
-            # Delete the game
-            try:
-                del active_games[chat_id]
-            except KeyError:
-                pass
-                
+            del active_games[chat_id]
             await query.answer("Game ended!")
         except Exception as e:
             print(f"Error ending game: {e}")
@@ -472,7 +429,7 @@ Game ended by: {query.from_user.first_name}
             await query.answer()
         except Exception as e:
             print(f"Error starting game: {e}")
-            await query.answer("Error starting game. Try again.", show_alert=True)
+            await query.answer("Error starting game. Try /wordle instead.", show_alert=True)
     
     else:
         await query.answer()
@@ -480,32 +437,24 @@ Game ended by: {query.from_user.first_name}
 @app.on_message(filters.command("wordlehelp"))
 async def wordle_help(_, message: Message):
     help_text = """
-🎮 **Wordle Game Help**
+🎮 **Wordle Help**
 
 **Commands:**
-• /wordle - Start a new Wordle game
-• /guess WORD - Make a guess in an active game
-• /wordlehelp - Show this help message
+• /wordle - Start a new game
+• /guess WORD - Make a guess
+• /wordlehelp - This help
 
 **How to Play:**
-1. You have to guess a random 5-letter word.
-2. After each guess, you'll get hints:
-   - 🟩 - Correct letter in the right spot.
-   - 🟨 - Correct letter in the wrong spot.
-   - 🟥 - Letter not in the word.
-3. The game will run until the word is found or a maximum of 30 guesses are reached.
-4. The first person to guess the word correctly wins.
-5. Players take turns making guesses.
-
-**Scoring:**
-• +10 points for correctly guessing the word
-
-Have fun playing! 🎯
+• Guess the 5-letter word
+• 🟩 Right letter, right spot
+• 🟨 Right letter, wrong spot
+• 🟥 Letter not in word
+• 6 attempts maximum
 """
     await message.reply_text(
         help_text,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎮 Start Game", callback_data="wordle_start")]
+            [InlineKeyboardButton("Start Game", callback_data="wordle_start")]
         ])
     )
 
@@ -539,67 +488,37 @@ async def join_wordle_callback(_, query: CallbackQuery):
         
         # Check if there's a game in progress
         if chat_id not in active_games:
-            await query.answer("No active game found. Start a new game with /wordle", show_alert=True)
+            await query.answer("No active game. Start with /wordle", show_alert=True)
             return
         
         # Check if user is already a player
         if user_id in active_games[chat_id]["players"]:
-            await query.answer("You're already part of this game!", show_alert=True)
+            await query.answer("You're already in this game!", show_alert=True)
             return
         
         # Add user to players
         active_games[chat_id]["players"][user_id] = 0
-        
-        # Get player name
         player_name = query.from_user.first_name
         
         # Update game message
         try:
-            # Get updated game status with the new player
-            updated_message = await create_game_message(chat_id)
-            
-            # Edit the message to reflect new player joining
-            await query.message.edit_text(
-                f"""
-🎮 **Wordle Game in Progress**
-Word length: **5 letters**
-
-**How to Play:**
-1. You have to guess a random 5-letter word.
-2. After each guess, you'll get hints:
-   - 🟩 - Correct letter in the right spot.
-   - 🟨 - Correct letter in the wrong spot.
-   - 🟥 - Letter not in the word.
-3. The game will run until the word is found or a maximum of 30 guesses are reached.
-
-💡 {player_name} has joined the game!
-
-To make a guess, send: `/guess WORD`
-
-{updated_message}
-""",
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
-                        InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
-                    ],
-                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                ])
+            # Get updated game message
+            message, markup = await create_game_message(
+                chat_id, 
+                extra_text=f"✅ {player_name} joined the game!"
             )
             
-            # Show confirmation to user
-            await query.answer(f"You've joined the game! When it's your turn, use /guess WORD to play.", show_alert=True)
-            
-            # Also send a separate notification message for better visibility
-            await query.message.reply_text(f"**{player_name}** has joined the Wordle game!")
+            # Edit the message
+            await query.message.edit_text(message, reply_markup=markup)
+            await query.answer("Joined! Use /guess WORD to play")
             
         except Exception as e:
-            print(f"Error updating game message after joining: {e}")
-            await query.answer("Joined the game, but couldn't update message.", show_alert=True)
+            print(f"Error updating game message: {e}")
+            await query.answer("Joined, but couldn't update message", show_alert=True)
             
     except Exception as e:
-        print(f"Error in join_wordle callback: {e}")
-        await query.answer("Error joining game. Try again.", show_alert=True)
+        print(f"Error in join callback: {e}")
+        await query.answer("Error joining. Try again.", show_alert=True)
 
 @app.on_callback_query(filters.regex("wordle_show"))
 async def show_wordle_callback(_, query: CallbackQuery):
@@ -609,106 +528,68 @@ async def show_wordle_callback(_, query: CallbackQuery):
         
         # Check if there's a game in progress
         if chat_id not in active_games:
-            await query.answer("No game in progress. Start a new game with /wordle", show_alert=True)
+            await query.answer("No game in progress", show_alert=True)
             return
         
-        # Update game message
-        updated_message = await create_game_message(chat_id)
-        await query.message.edit_text(
-            f"""
-🎮 **Wordle Game in Progress**
-Word length: **5 letters**
-
-**How to Play:**
-1. You have to guess a random 5-letter word.
-2. After each guess, you'll get hints:
-   - 🟩 - Correct letter in the right spot.
-   - 🟨 - Correct letter in the wrong spot.
-   - 🟥 - Letter not in the word.
-3. The game will run until the word is found or a maximum of 30 guesses are reached.
-
-To make a guess, send: `/guess WORD`
-{updated_message}
-""",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-            ])
-        )
+        # Get updated game message
+        message, markup = await create_game_message(chat_id)
         
+        # Send as new message to avoid editing limitations
+        await query.message.reply_text(message, reply_markup=markup)
         await query.answer("Game status updated!")
     except Exception as e:
-        print(f"Error in show_wordle callback: {e}")
-        await query.answer("Error showing game. Try again.", show_alert=True)
+        print(f"Error in show callback: {e}")
+        await query.answer("Error showing game", show_alert=True)
 
-@app.on_callback_query(filters.regex("wordle_end"))
-async def end_wordle_callback(_, query: CallbackQuery):
-    """Handler for ending a Wordle game"""
+@app.on_callback_query(filters.regex("join_wordle"))
+async def join_wordle_alternate_callback(_, query: CallbackQuery):
+    """Alternate handler for joining via the join_wordle callback data"""
+    # Forward to the main join handler
+    await join_wordle_callback(_, query)
+
+@app.on_callback_query(filters.regex("game_error_recovery"))
+async def game_error_recovery_callback(_, query: CallbackQuery):
+    """Handle recovery from game errors"""
     try:
         chat_id = query.message.chat.id
         user_id = query.from_user.id
         
-        # Check if there's a game in progress
-        if chat_id not in active_games:
-            await query.answer("No game in progress to end.", show_alert=True)
+        # Check if user is admin or game creator
+        is_admin = False
+        try:
+            member = await app.get_chat_member(chat_id, user_id)
+            is_admin = member.status in ("creator", "administrator")
+        except Exception:
+            pass
+            
+        # If there's an active game, check if user is the creator
+        is_creator = False
+        if chat_id in active_games and active_games[chat_id].get("players"):
+            # First player is usually the creator
+            players = list(active_games[chat_id]["players"].keys())
+            if players and players[0] == user_id:
+                is_creator = True
+        
+        if not (is_admin or is_creator):
+            await query.answer("Only admins or game creators can reset", show_alert=True)
             return
-        
-        # Only allow game creator or admins to end the game
-        game_creator = list(active_games[chat_id]["players"].keys())[0] if active_games[chat_id]["players"] else None
-        
-        if user_id != game_creator:
-            # Check if user is admin
-            try:
-                member = await app.get_chat_member(chat_id, user_id)
-                is_admin = member.status in ("creator", "administrator")
-                if not is_admin:
-                    await query.answer("Only the game creator or admins can end the game.", show_alert=True)
-                    return
-            except Exception:
-                await query.answer("Only the game creator or admins can end the game.", show_alert=True)
-                return
-        
-        # Get the word
-        word = active_games[chat_id]["word"]
-        
-        # Format players
-        players_text = []
-        for pid, score in sorted(active_games[chat_id]["players"].items(), key=lambda x: x[1], reverse=True):
-            try:
-                player_name = await get_user_name(chat_id, pid)
-                players_text.append(f"• {player_name}: {score}")
-            except Exception:
-                continue
-                
-        players_text_str = "\n".join(players_text) if players_text else "No players"
-        
-        # Update game message
+            
+        # Clear any existing game state
+        if chat_id in active_games:
+            del active_games[chat_id]
+            
+        # Simplified reset message
         await query.message.edit_text(
-            f"""
-🎮 **Wordle Game Ended**
-
-The word was: **{word}**
-
-**Final Scores:**
-{players_text_str}
-
-Start a new game with /wordle
-""",
+            "🎮 **Game Reset**\n\nThe game has been reset due to an error.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+                [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
         )
+        await query.answer("Game reset successful!")
         
-        # Delete the game
-        try:
-            del active_games[chat_id]
-        except KeyError:
-            pass
-        
-        await query.answer("Game ended successfully!", show_alert=True)
     except Exception as e:
-        print(f"Error in end_wordle callback: {e}")
-        await query.answer("Error ending game. Try again.", show_alert=True)
+        print(f"Error in game recovery: {e}")
+        await query.answer("Could not reset. Try /wordle instead", show_alert=True)
 
 @app.on_callback_query(filters.regex("wordle_hint"))
 async def wordle_hint_callback(_, query: CallbackQuery):
@@ -719,101 +600,48 @@ async def wordle_hint_callback(_, query: CallbackQuery):
         
         # Check if there's a game in progress
         if chat_id not in active_games:
-            await query.answer("No active game found. Start one with /wordle", show_alert=True)
+            await query.answer("No active game found. Start with /wordle", show_alert=True)
             return
         
-        # Allow anyone to use hints without joining first (more user-friendly)
+        # Auto-join the user when they request a hint
         if user_id not in active_games[chat_id]["players"]:
-            # Auto-join the user when they request a hint
             active_games[chat_id]["players"][user_id] = 0
             await query.answer("You've been added to the game!", show_alert=True)
         
         # Limit hints to 3 per game
         if active_games[chat_id].get("hints_used", 0) >= 3:
-            await query.answer("Maximum hints (3) already used for this game!", show_alert=True)
+            await query.answer("Maximum hints (3) already used!", show_alert=True)
             return
         
-        # Get the current word and give a hint
+        # Get the current word
         word = active_games[chat_id]["word"]
         attempts = active_games[chat_id]["attempts"]
         
-        # Extended hint map with more common words
-        hint_map = {
-            "APPLE": "A common fruit that keeps the doctor away",
-            "EARTH": "The planet we live on",
-            "MUSIC": "Something you listen to that has rhythm and melody",
-            "WATER": "Essential liquid for life",
-            "DANCE": "Moving your body to music",
-            "LIGHT": "The opposite of darkness",
-            "HOUSE": "A place where people live",
-            "DREAM": "What you see when you sleep",
-            "HEART": "It pumps blood through your body",
-            "BEACH": "Sandy shore by the ocean",
-            "MOVIE": "Entertainment on a big screen",
-            "SMILE": "Happy facial expression",
-            "TIGER": "A large striped wild cat",
-            "CLOUD": "White fluffy thing in the sky",
-            "BRAIN": "Organ used for thinking",
-            "PHONE": "Device used to call people",
-            "HAPPY": "Feeling joy or pleasure",
-            "GREEN": "The color of grass",
-            "WORLD": "The planet we all live on",
-            "PLANT": "Living organism that grows in soil",
-            "RIVER": "Flowing body of water",
-            "TABLE": "Furniture with a flat top and legs",
-            "SWEET": "Taste like sugar",
-            "BLOOD": "Red fluid in your veins",
-            "BREAD": "Baked food made from flour",
-            "CHILD": "Young human",
-            "SPACE": "Area beyond Earth's atmosphere",
-            "GHOST": "Spooky spirit",
-            "STORM": "Weather with strong wind and rain",
-            "QUEEN": "Female ruler of a kingdom",
-            "MAGIC": "Supernatural powers",
-            "PAPER": "Material used for writing",
-            "METAL": "Strong materials like iron or gold",
-            "SHARE": "Give a portion to others",
-            "COLOR": "Visual property like red or blue",
-            "MONEY": "Currency used to buy things",
-        }
-        
-        # Determine hint type based on hints used so far
+        # Choose hint type based on hints used so far
         hints_used = active_games[chat_id].get("hints_used", 0)
         
         if hints_used == 0:
             # First hint - reveal the first letter
             hint = f"The word starts with '{word[0]}'"
         elif hints_used == 1:
-            # Second hint - give another letter position or definition hint
-            if word in hint_map:
-                # If we have a definition, use it
-                hint = hint_map[word]
-            else:
-                # Otherwise give a letter position hint
-                letter_pos = random.randint(1, len(word)-1)  # Not the first letter
-                hint = f"The letter at position {letter_pos+1} is '{word[letter_pos]}'"
+            # Second hint - letter position hint
+            letter_pos = random.randint(1, len(word)-1)  # Not the first letter
+            hint = f"Letter at position {letter_pos+1} is '{word[letter_pos]}'"
         else:
-            # Third hint - more substantial 
+            # Third hint - more substantial
+            # If there are attempts, find an unused correct letter
             if len(attempts) > 0:
-                # Analyze incorrect guesses to give more targeted hint
-                all_correct_positions = set()
-                for attempt in attempts:
-                    for i, letter in enumerate(attempt):
-                        if letter == word[i]:
-                            all_correct_positions.add(i)
+                # Find a position not yet guessed correctly
+                correct_letters = active_games[chat_id].get("correct_letters", set())
+                unused_letters = [letter for letter in word if letter not in correct_letters]
                 
-                # Find a position not yet guessed correctly 
-                available_positions = [i for i in range(len(word)) if i not in all_correct_positions]
-                
-                if available_positions:
-                    pos = random.choice(available_positions)
-                    hint = f"The letter at position {pos+1} is '{word[pos]}'"
+                if unused_letters:
+                    letter = random.choice(unused_letters)
+                    pos = word.index(letter)
+                    hint = f"Letter at position {pos+1} is '{letter}'"
                 else:
-                    # All positions have been guessed correctly at some point
-                    # Give a scrambled version of the word minus any correctly placed letters
-                    letters = list(word)
-                    random.shuffle(letters)
-                    hint = f"The word contains these letters (scrambled): {''.join(letters)}"
+                    # All letters have been guessed at some point
+                    hint = f"The word has these letters: {', '.join(sorted(set(word)))}"
             else:
                 # No attempts yet, give the first two letters
                 hint = f"The word starts with '{word[0:2]}'"
@@ -824,37 +652,16 @@ async def wordle_hint_callback(_, query: CallbackQuery):
         # Send the hint
         await query.answer(f"HINT: {hint}", show_alert=True)
         
-        # Update the game message to show that a hint was used
+        # Update the game message
         try:
-            updated_message = await create_game_message(chat_id)
-            hints_used = active_games[chat_id]["hints_used"]
-            
-            await query.message.edit_text(
-                f"""
-🎮 **Wordle Game in Progress**
-Word length: **5 letters**
-
-**How to Play:**
-1. You have to guess a random 5-letter word.
-2. After each guess, you'll get hints:
-   - 🟩 - Correct letter in the right spot.
-   - 🟨 - Correct letter in the wrong spot.
-   - 🟥 - Letter not in the word.
-
-💡 Hints used: {hints_used}/3 - Last hint: "{hint}"
-
-To make a guess, send: `/guess WORD`
-
-{updated_message}
-""",
-                reply_markup=InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
-                        InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
-                    ],
-                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                ])
+            message, markup = await create_game_message(
+                chat_id, 
+                hints_used=active_games[chat_id]["hints_used"],
+                extra_text=f"💡 {query.from_user.first_name} used a hint!"
             )
+            
+            # Edit the message
+            await query.message.edit_text(message, reply_markup=markup)
         except Exception as e:
             print(f"Error updating hint message: {e}")
         
