@@ -2,6 +2,8 @@ from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery
 from AviaxMusic import app
 from config import BANNED_USERS
+import json
+import os
 
 # Supported languages with their display names and flags
 LANGUAGES = {
@@ -66,8 +68,34 @@ DEFAULT_STRINGS = {
     }
 }
 
-# Store user language preferences
+# Store user language preferences in memory for fast access
 user_languages = {}
+LANGUAGE_FILE = "user_languages.json"
+
+# Load language preferences from file
+def load_language_preferences():
+    """Load user language preferences from file"""
+    global user_languages
+    try:
+        if os.path.exists(LANGUAGE_FILE):
+            with open(LANGUAGE_FILE, 'r', encoding='utf-8') as f:
+                user_languages = json.load(f)
+                print(f"Loaded language preferences for {len(user_languages)} users")
+    except Exception as e:
+        print(f"Error loading language preferences: {e}")
+        user_languages = {}
+
+# Save language preferences to file
+def save_language_preferences():
+    """Save user language preferences to file"""
+    try:
+        with open(LANGUAGE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(user_languages, f, indent=4)
+    except Exception as e:
+        print(f"Error saving language preferences: {e}")
+
+# Load preferences on module import
+load_language_preferences()
 
 def get_user_language(user_id):
     """Get the language preference for a user"""
@@ -84,7 +112,8 @@ async def update_user_language(user_id, lang_code):
     """Update a user's language preference"""
     if lang_code in LANGUAGES:
         user_languages[str(user_id)] = lang_code
-        # In a real implementation, save this to a database
+        # Save to file after updating
+        save_language_preferences()
         return True
     return False
 

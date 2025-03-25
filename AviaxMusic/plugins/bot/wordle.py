@@ -56,80 +56,68 @@ async def get_user_name(chat_id: int, user_id: int) -> str:
     except Exception:
         return "Unknown User"
 
-async def create_game_message(chat_id: int) -> str:
-    """Create the game status message"""
-    game = active_games[chat_id]
-    word = game["word"]
-    attempts = game["attempts"]
+async def create_game_message(chat_id, available_letters=None, extra_text="", hints_used=0):
+    """Create the game status message with the current game state"""
+    game_data = active_games.get(chat_id, {})
     
-    # Format players
-    players_list = []
-    for user_id, score in sorted(game["players"].items(), key=lambda x: x[1], reverse=True):
-        name = await get_user_name(chat_id, user_id)
-        # Add crown emoji for current player
-        if user_id == game.get("current_player"):
-            players_list.append(f"👑 {name}: {score}")
+    # Update last activity timestamp
+    game_data["last_activity"] = time.time()
+    
+    if not game_data:
+        return None
+    
+    word = game_data.get("word", "")
+    attempts = game_data.get("attempts", [])
+    players = game_data.get("players", {})
+    
+    if not available_letters:
+        available_letters = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    
+    # Format the word display with proper spacing - show only guessed letters
+    displayed_word = ""
+    for char in word:
+        if char.upper() in game_data.get("correct_letters", set()):
+            displayed_word += f" {char.upper()} "
         else:
-            players_list.append(f"• {name}: {score}")
+            displayed_word += " _ "
     
-    players_text = "\n".join(players_list) if players_list else "No players yet"
+    # Format available letters with better spacing
+    letters_display = ""
+    for idx, letter in enumerate(available_letters):
+        letters_display += f" {letter} "
+        if (idx + 1) % 7 == 0 and idx < len(available_letters) - 1:
+            letters_display += "\n"
     
-    # Format attempts with colored squares
-    attempts_text = ""
-    for attempt in attempts:
-        attempt_result = ""
-        for i, letter in enumerate(attempt):
-            if letter == word[i]:
-                attempt_result += f"🟩 {letter} "  # Correct position
-            elif letter in word:
-                attempt_result += f"🟨 {letter} "  # In word but wrong position
-            else:
-                attempt_result += f"🟥 {letter} "  # Not in word
-        attempts_text += f"{attempt_result}\n"
+    # Create the game status message
+    message = (
+        f"🎮 **WORDLE GAME**\n\n"
+        f"Word: `{displayed_word.strip()}`\n\n"
+        f"Attempts: {len(attempts)}/6\n"
+        f"Players: {len(players)}\n"
+        f"Hints Used: {hints_used}/3\n\n"
+        f"Available Letters:\n`{letters_display}`\n\n"
+    )
     
-    # Calculate remaining guesses
-    max_attempts = 30
-    remaining = max_attempts - len(attempts)
+    if extra_text:
+        message += f"{extra_text}\n\n"
     
-    # Get current player name
-    current_player_text = ""
-    if game.get("current_player"):
-        current_player_name = await get_user_name(chat_id, game["current_player"])
-        current_player_text = f"\n🎮 Current Player: {current_player_name}"
+    message += (
+        "Make a guess with /guess [word]\n"
+        "For example: `/guess hello`"
+    )
     
-    # Used letters tracking
-    used_letters = set()
-    for attempt in attempts:
-        for letter in attempt:
-            used_letters.add(letter)
-            
-    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    remaining_letters = "".join([letter for letter in alphabet if letter not in used_letters])
+    # Create the markup with join and hint buttons, add recovery button for admins
+    markup = [
+        [
+            InlineKeyboardButton("Join Game", callback_data="join_wordle"),
+            InlineKeyboardButton("Hint", callback_data="wordle_hint")
+        ]
+    ]
     
-    # Format remaining letters with spaces for better readability
-    formatted_letters = " ".join(list(remaining_letters))
+    # Add the recovery button at the bottom
+    markup.append([InlineKeyboardButton("🔄 Reset Game (Admin)", callback_data="game_error_recovery")])
     
-    # Format blanks for word with proper spacing
-    word_blanks = " ".join(["_"] * len(word))
-    
-    return f"""
-🎮 **Wordle Game**
-
-Word: `{word_blanks}` ({len(word)} letters)
-Attempts: {len(attempts)}/{max_attempts}
-Remaining: {remaining} guesses{current_player_text}
-
-**Previous Attempts:**
-{attempts_text if attempts else "No attempts yet"}
-
-**Available Letters:**
-`{formatted_letters}`
-
-**Players:**
-{players_text}
-
-To guess, use: `/guess WORD`
-"""
+    return message, InlineKeyboardMarkup(markup)
 
 def check_word(guess: str, word: str) -> str:
     """Check guess against the word and return formatted result"""

@@ -173,18 +173,30 @@ class PlaylistManager:
             # Look through all user playlists to find similar tracks
             all_tracks = []
             playlists_dir = self.playlists_dir
+            
+            # Check if playlists directory exists before trying to read from it
+            if not os.path.exists(playlists_dir):
+                self.ensure_playlist_dir()
+                return []  # Return empty list if directory was just created
+                
             for user_folder in os.listdir(playlists_dir):
                 user_path = os.path.join(playlists_dir, user_folder)
                 if os.path.isdir(user_path):
                     for playlist_file in os.listdir(user_path):
                         if playlist_file.endswith('.json') and playlist_file != '_history.json':
                             file_path = os.path.join(user_path, playlist_file)
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                try:
-                                    playlist_tracks = json.load(f)
-                                    all_tracks.extend(playlist_tracks)
-                                except:
-                                    pass
+                            try:
+                                if os.path.exists(file_path):
+                                    with open(file_path, 'r', encoding='utf-8') as f:
+                                        try:
+                                            playlist_tracks = json.load(f)
+                                            all_tracks.extend(playlist_tracks)
+                                        except json.JSONDecodeError:
+                                            print(f"Warning: Invalid JSON in {file_path}")
+                                        except Exception as e:
+                                            print(f"Error reading playlist file {file_path}: {e}")
+                            except Exception as e:
+                                print(f"Error accessing file {file_path}: {e}")
             
             # Deduplicate tracks
             seen_ids = set()
