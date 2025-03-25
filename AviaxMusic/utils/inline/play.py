@@ -161,7 +161,18 @@ def telegram_markup_timer(_, chat_id, played, dur):
     return buttons
 
 
-def stream_markup(_, videoid, chat_id):
+def stream_markup(_, videoid=None, chat_id=None):
+    """Stream markup buttons
+    
+    In most places this function is called with just _ and chat_id
+    but in some places it's called with _, videoid, chat_id
+    This modification allows both usages.
+    """
+    if chat_id is None and videoid is not None:
+        # For backward compatibility with code that calls stream_markup(_, chat_id)
+        chat_id = videoid
+        videoid = None
+        
     buttons = [
         [
             InlineKeyboardButton(
@@ -202,7 +213,11 @@ def stream_markup(_, videoid, chat_id):
                 callback_data="wordle_button",
             ),
         ],
-        [
+    ]
+    
+    # Only add the back button if videoid is provided
+    if videoid:
+        buttons.append([
             InlineKeyboardButton(
                 text="≼ Back",
                 callback_data=f"MainMarkup {videoid}|{chat_id}",
@@ -210,8 +225,14 @@ def stream_markup(_, videoid, chat_id):
             InlineKeyboardButton(
                 text="🗑 Close", callback_data=f"close"
             ),
-        ],
-    ]
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton(
+                text="🗑 Close", callback_data=f"close"
+            ),
+        ])
+        
     return buttons
 
 
