@@ -1,3 +1,8 @@
+from pyrogram import filters
+from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from AviaxMusic import app
+from AviaxMusic.plugins.bot.hangman import start_hangman
+
 @app.on_callback_query(filters.regex("game_mode"))
 async def game_mode_callback(_, query: CallbackQuery):
     try:
@@ -29,10 +34,14 @@ async def get_movie_callback(_, query: CallbackQuery):
             """
 🎬 **Welcome to Movie Zone!**
 
-Join our movie Group to get:
+Join our movie channel to get:
 • Latest Movies
+• TV Shows
 • Web Series
+• Anime
 • And much more!
+
+📺 Join Now: @LB_Movies
 """,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🍿 Join Movie Channel 🍿", url="https://t.me/LB_Movies")],
