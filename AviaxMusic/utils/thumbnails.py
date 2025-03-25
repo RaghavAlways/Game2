@@ -243,152 +243,185 @@ async def gen_thumb(videoid: str):
             
             return cache_path
             
-        results = VideosSearch(videoid, limit=1)
-        async for result in results.next():
-            try:
-                title = result["title"][:50]
-                title = re.sub(r"\W+", " ", title)
-                title = title.title()
-            except:
-                title = "Unsupported Title"
+        # Fix: Properly handle the VideosSearch coroutine
+        vs = VideosSearch(videoid, limit=1)
+        result_data = await vs.next()
+        
+        if not result_data or not result_data.get("result"):
+            # Return default thumbnail if no results
+            default_thumb = "assets/Thumbnail.jpg"
+            if not os.path.isfile(default_thumb):
+                default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+            return default_thumb
+        
+        # Get the first result
+        result = result_data["result"][0]
+        
+        try:
+            title = result["title"][:50]
+            title = re.sub(r"\W+", " ", title)
+            title = title.title()
+        except:
+            title = "Unsupported Title"
+        
+        try:
+            duration = result["duration"]
+        except:
+            duration = "Unknown Duration"
+        
+        try:
+            thumbnail = result["thumbnails"][0]["url"].split("?")[0]
+        except:
+            # Use a more reliable default thumbnail
+            thumbnail = "https://te.legra.ph/file/d5b8b91d5d8093dd9bc64.jpg"
+        
+        # Get the image data
+        thumbnail_data = await get_image(thumbnail)
+        if not thumbnail_data:
+            # Return default thumbnail if image fetch fails
+            default_thumb = "assets/Thumbnail.jpg"
+            if not os.path.isfile(default_thumb):
+                default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+            return default_thumb
+        
+        # Process image for better display
+        image = Image.open(thumbnail_data)
+        
+        # Improved image processing for better quality
+        
+        # Resize and crop to 16:9 aspect ratio if needed
+        width, height = image.size
+        if width/height != 16/9:
+            # Calculate target dimensions
+            if width/height > 16/9:
+                # Image is wider than 16:9
+                new_width = int(height * 16/9)
+                left = (width - new_width) // 2
+                image = image.crop((left, 0, left + new_width, height))
+            else:
+                # Image is taller than 16:9
+                new_height = int(width * 9/16)
+                top = (height - new_height) // 2
+                image = image.crop((0, top, width, top + new_height))
+        
+        # Resize to standard size for consistency
+        image = image.resize((1280, 720), Image.Resampling.LANCZOS)
+        
+        # Enhanced image processing
+        image = enhance_thumbnail(image)
+        
+        # Create a background with gradient
+        background = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
+        color = random_color()
+        overlay = generate_gradient(1280, 720, (30, 30, 30, 220), (color[0], color[1], color[2], 80))
+        
+        # Blend the image with background
+        background.paste(image, (0, 0))
+        background = Image.alpha_composite(background.convert("RGBA"), overlay)
+        
+        # Add a green boundary
+        background = add_green_boundary(background)
+        
+        # Use a larger portion of the screen for the image by reducing text area
+        # Load logo for the profile pic - make it smaller and move it to top-left corner
+        logo = "assets/logo.png"
+        if os.path.exists(logo):
+            circle_logo = crop_center_circle(Image.open(logo), 120)  # Smaller size
+            # Position in the top-left corner with padding
+            background.paste(circle_logo, (40, 40), circle_logo)
+        
+        # Load fonts
+        try:
+            font_file = "assets/font2.ttf"
+            font_file_bold = "assets/font2.ttf"
             
-            try:
-                duration = result["duration"]
-            except:
-                duration = "Unknown Duration"
+            # Add title text with shadow - smaller and positioned better
+            title_font = ImageFont.truetype(font_file_bold, 34)  # Reduced font size
+            draw = ImageDraw.Draw(background)
             
-            try:
-                thumbnail = result["thumbnails"][0]["url"].split("?")[0]
-            except:
-                thumbnail = "https://te.legra.ph/file/d5b8b91d5d8093dd9bc64.jpg"
+            # Use a more compact layout for text to make image appear larger
+            title_lines = truncate(title)
             
-            try:
-                result["viewCount"]["text"]
-            except:
-                pass
+            # Position title at the top of the image for a more compact layout
+            y_position = 45
             
-            try:
-                result["channel"]["name"]
-            except:
-                pass
+            # Add a semi-transparent overlay just for the text area in top right
+            text_overlay = Image.new("RGBA", (600, 130), (0, 0, 0, 180))
+            background.paste(text_overlay, (640, 20), text_overlay)
             
-            thumbnail = await get_image(thumbnail)
-            if not thumbnail:
-                return "assets/Thumbnail.jpg"
+            # Title alignment to the right side
+            x_position = 680
             
-            # Process image for better display
-            image = Image.open(thumbnail)
+            for line in title_lines:
+                if line:
+                    # Add text shadow for readability
+                    draw_text_with_shadow(
+                        background, draw, 
+                        (x_position, y_position),
+                        line, title_font, "white"
+                    )
+                    y_position += 45
             
-            # Improved image processing for better quality
+            # Add duration text
+            duration_font = ImageFont.truetype(font_file, 26)  # Smaller font
+            draw_text_with_shadow(
+                background, draw, 
+                (x_position, y_position + 5),
+                f"Duration: {duration}", duration_font, "white"
+            )
             
-            # Resize and crop to 16:9 aspect ratio if needed
-            width, height = image.size
-            if width/height != 16/9:
-                # Calculate target dimensions
-                if width/height > 16/9:
-                    # Image is wider than 16:9
-                    new_width = int(height * 16/9)
-                    left = (width - new_width) // 2
-                    image = image.crop((left, 0, left + new_width, height))
-                else:
-                    # Image is taller than 16:9
-                    new_height = int(width * 9/16)
-                    top = (height - new_height) // 2
-                    image = image.crop((0, top, width, top + new_height))
+            # Save optimized image
+            if not os.path.exists("cache"):
+                os.makedirs("cache")
             
-            # Resize to standard size for consistency
-            image = image.resize((1280, 720), Image.Resampling.LANCZOS)
+            background = background.convert("RGB")
+            background.save(cache_path, format="PNG", optimize=True)
             
-            # Enhanced image processing
-            image = enhance_thumbnail(image)
+            # Add to cache dict for LRU tracking
+            processed_cache[videoid] = {"timestamp": time.time(), "path": cache_path}
             
-            # Create a background with gradient
-            background = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
-            color = random_color()
-            overlay = generate_gradient(1280, 720, (30, 30, 30, 220), (color[0], color[1], color[2], 80))
+            # Clean cache if it's getting too large
+            if len(processed_cache) > CACHE_SIZE:
+                await cleanup_old_thumbnails()
             
-            # Blend the image with background
-            background.paste(image, (0, 0))
-            background = Image.alpha_composite(background.convert("RGBA"), overlay)
+            return cache_path
+        except Exception as e:
+            print(f"Error in thumbnail text rendering: {e}")
+            # If error in text, still try to save the image without text
+            if not os.path.exists("cache"):
+                os.makedirs("cache")
+            background = background.convert("RGB")
+            background.save(cache_path, format="PNG", optimize=True)
+            return cache_path
             
-            # Add a green boundary
-            background = add_green_boundary(background)
-            
-            # Use a larger portion of the screen for the image by reducing text area
-            # Load logo for the profile pic - make it smaller and move it to top-left corner
-            logo = "assets/logo.png"
-            if os.path.exists(logo):
-                circle_logo = crop_center_circle(Image.open(logo), 120)  # Smaller size
-                # Position in the top-left corner with padding
-                background.paste(circle_logo, (40, 40), circle_logo)
-            
-            # Load fonts
-            try:
-                font_file = "assets/font2.ttf"
-                font_file_bold = "assets/font2.ttf"
-                
-                # Add title text with shadow - smaller and positioned better
-                title_font = ImageFont.truetype(font_file_bold, 34)  # Reduced font size
-                draw = ImageDraw.Draw(background)
-                
-                # Use a more compact layout for text to make image appear larger
-                title_lines = truncate(title)
-                
-                # Position title at the top of the image for a more compact layout
-                y_position = 45
-                
-                # Add a semi-transparent overlay just for the text area in top right
-                text_overlay = Image.new("RGBA", (600, 130), (0, 0, 0, 180))
-                background.paste(text_overlay, (640, 20), text_overlay)
-                
-                # Title alignment to the right side
-                x_position = 680
-                
-                for line in title_lines:
-                    if line:
-                        # Add text shadow for readability
-                        draw_text_with_shadow(
-                            background, draw, 
-                            (x_position, y_position),
-                            line, title_font, "white"
-                        )
-                        y_position += 45
-                
-                # Add duration text
-                duration_font = ImageFont.truetype(font_file, 26)  # Smaller font
-                draw_text_with_shadow(
-                    background, draw, 
-                    (x_position, y_position + 5),
-                    f"Duration: {duration}", duration_font, "white"
-                )
-                
-                # Save optimized image
-                if not os.path.exists("cache"):
-                    os.makedirs("cache")
-                
-                background = background.convert("RGB")
-                background.save(cache_path, format="PNG", optimize=True)
-                
-                # Add to cache dict for LRU tracking
-                processed_cache[videoid] = {"timestamp": time.time(), "path": cache_path}
-                
-                # Clean cache if it's getting too large
-                if len(processed_cache) > CACHE_SIZE:
-                    await cleanup_old_thumbnails()
-                
-                return cache_path
-            except Exception as e:
-                print(f"Error in thumbnail text rendering: {e}")
-                # If error in text, still try to save the image without text
-                if not os.path.exists("cache"):
-                    os.makedirs("cache")
-                background = background.convert("RGB")
-                background.save(cache_path, format="PNG", optimize=True)
-                return cache_path
-                
     except Exception as e:
         print(f"Error in thumbnail generation: {e}")
-        return "assets/Thumbnail.jpg"
+        # Return a default thumbnail that definitely exists
+        default_thumb = "assets/Thumbnail.jpg"
+        if not os.path.isfile(default_thumb):
+            default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+        return default_thumb
+
+# Fix: Update the get_image function to handle errors better
+async def get_image(url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    # Save to a temporary file
+                    temp_file = f"cache/temp_{int(time.time())}.jpg"
+                    if not os.path.exists("cache"):
+                        os.makedirs("cache")
+                    async with aiofiles.open(temp_file, "wb") as f:
+                        await f.write(data)
+                    return temp_file
+                else:
+                    print(f"Error fetching image: HTTP {resp.status}")
+                    return None
+    except Exception as e:
+        print(f"Error downloading image: {e}")
+        return None
 
 # Clean up old thumbnails periodically
 async def cleanup_old_thumbnails():
