@@ -116,4 +116,4 @@ if SUPPORT_GROUP:
             "[ERROR] - Your SUPPORT_GROUP url is wrong. Please ensure that it starts with https://"
         )
 
-LOGGER_ID = -1001234567890  # Replace with your logger group ID
+LOGGER_ID = -1002430579671  # Replace with your logger group ID
