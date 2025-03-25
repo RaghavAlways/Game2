@@ -105,21 +105,24 @@ async def create_game_message(chat_id, available_letters=None, extra_text="", hi
     correct_letters = game_data.get("correct_letters", set())
     displayed_word = "".join([char.upper() if char.upper() in correct_letters else "_" for char in word])
     
-    # Create the concise game status message without extra formatting
+    # Create the concise game status message with blockquote formatting
     message = (
+        "<blockquote>\n"
         f"🎮 WORDLE\n"
         f"Word: `{displayed_word}`\n"
-        f"Tries: {len(attempts)}/6 • Players: {len(players)}\n"
+        f"Tries: {len(attempts)}/6 • Players: {len(players)}"
     )
     
     if hints_used > 0:
-        message += f"Hints: {hints_used}/3\n"
+        message += f"\nHints: {hints_used}/3"
     
     if extra_text:
-        message += f"{extra_text}\n"
+        message += f"\n{extra_text}"
     
     if letters_display:
-        message += f"Letters: `{letters_display}`\n"
+        message += f"\nLetters: `{letters_display}`"
+    
+    message += "\n</blockquote>"
     
     # Create compact markup with consistent callback data
     markup = [
@@ -156,7 +159,7 @@ async def start_wordle(_, message: Message):
     # Check if there's already a game in this chat
     if chat_id in active_games:
         reply = await message.reply_text(
-            "❗ Game already in progress!",
+            "<blockquote>❗ Game already in progress!</blockquote>",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Show Game", callback_data="wordle_show")]
             ])
@@ -187,14 +190,14 @@ async def start_wordle(_, message: Message):
     }
     
     # Send concise initial game message
-    game_message = f"""
+    game_message = """<blockquote>
 🎮 Wordle Game Started!
 • Guess the 5-letter word
 • 🟩 Right letter, right spot
 • 🟨 Right letter, wrong spot
 • 🟥 Letter not in word
 Use: `/guess WORD`
-"""
+</blockquote>"""
     
     reply = await message.reply_text(
         game_message,
@@ -223,13 +226,13 @@ async def make_guess(_, message: Message):
     
     # Check if there's a game in progress
     if chat_id not in active_games:
-        await message.reply_text("❌ No active game. Start with /wordle")
+        await message.reply_text("<blockquote>❌ No active game. Start with /wordle</blockquote>")
         return
     
     # Check if user is a player
     if user_id not in active_games[chat_id]["players"]:
         reply = await message.reply_text(
-            "❌ Join the game first",
+            "<blockquote>❌ Join the game first</blockquote>",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Game", callback_data="wordle_join")]
             ])
@@ -245,7 +248,7 @@ async def make_guess(_, message: Message):
     # Check if it's the user's turn
     if user_id != active_games[chat_id]["current_player"]:
         current_player_name = await get_user_name(chat_id, active_games[chat_id]["current_player"])
-        reply = await message.reply_text(f"❌ Not your turn. Wait for {current_player_name}.")
+        reply = await message.reply_text(f"<blockquote>❌ Not your turn. Wait for {current_player_name}.</blockquote>")
         # Add to cleanup list
         if chat_id not in game_messages:
             game_messages[chat_id] = []
@@ -256,7 +259,7 @@ async def make_guess(_, message: Message):
     
     # Get the guess
     if len(message.command) < 2:
-        reply = await message.reply_text("❗ Provide a word: `/guess WORD`")
+        reply = await message.reply_text("<blockquote>❗ Provide a word: `/guess WORD`</blockquote>")
         # Add to cleanup list
         if chat_id not in game_messages:
             game_messages[chat_id] = []
@@ -269,7 +272,7 @@ async def make_guess(_, message: Message):
     
     # Validate guess is only letters
     if not re.match(r'^[A-Za-z]+$', guess):
-        reply = await message.reply_text("❗ Only letters allowed")
+        reply = await message.reply_text("<blockquote>❗ Only letters allowed</blockquote>")
         # Add to cleanup list
         if chat_id not in game_messages:
             game_messages[chat_id] = []
@@ -281,7 +284,7 @@ async def make_guess(_, message: Message):
     # Validate guess length
     word = active_games[chat_id]["word"]
     if len(guess) != len(word):
-        reply = await message.reply_text(f"❗ Must be {len(word)} letters")
+        reply = await message.reply_text("<blockquote>❗ Must be 5 letters</blockquote>")
         # Add to cleanup list
         if chat_id not in game_messages:
             game_messages[chat_id] = []
@@ -312,11 +315,11 @@ async def make_guess(_, message: Message):
         # Get attempt count
         attempts_count = len(active_games[chat_id]["attempts"])
         
-        # Create winner message (simplified without bold formatting)
-        winner_message = f"""
+        # Create winner message with blockquote
+        winner_message = f"""<blockquote>
 🎉 {message.from_user.first_name} guessed: {word}!
 ✅ Solved in {attempts_count} attempts
-"""
+</blockquote>"""
         
         # Send the winner message and clean up
         reply = await message.reply_text(
@@ -354,7 +357,7 @@ async def make_guess(_, message: Message):
     # Check if max attempts reached
     if len(active_games[chat_id]["attempts"]) >= 30:
         # Game over - no one guessed correctly (simplified)
-        game_over_message = f"❌ Game over! Word was: {word}"
+        game_over_message = "<blockquote>❌ Game over! Word was: {word}</blockquote>"
         
         reply = await message.reply_text(
             game_over_message,
@@ -376,7 +379,7 @@ async def make_guess(_, message: Message):
             
         return
     
-    # Show updated game status (simplified without bold formatting for guess)
+    # Show updated game status with blockquote
     next_player = await get_user_name(chat_id, active_games[chat_id]["current_player"])
     
     # Get remaining letters
@@ -391,17 +394,17 @@ async def make_guess(_, message: Message):
     for i in range(0, len(remaining_letters), 7):
         formatted_letters += remaining_letters[i:i+7] + " "
     
-    # Create compact progress display 
+    # Create compact progress display with blockquote
     masked_word = "".join([letter if letter in active_games[chat_id]["correct_letters"] else "_" for letter in word.upper()])
     
-    game_message = f"""
+    game_message = f"""<blockquote>
 🎲 {message.from_user.first_name}: {guess}
 {result}
 
 🎯 Word: `{masked_word}` ({len(active_games[chat_id]["attempts"])}/30)
 👤 Next: {next_player}
 🔤 Available: `{formatted_letters.strip()}`
-"""
+</blockquote>"""
     
     reply = await message.reply_text(
         game_message,
@@ -434,10 +437,7 @@ async def wordle_callback(_, query: CallbackQuery):
         
         try:
             message, markup = await create_game_message(chat_id)
-            await query.message.reply_text(
-                f"**Current Game:**\n\n{message}",
-                reply_markup=markup
-            )
+            await query.message.reply_text(message, reply_markup=markup)
             await query.answer()
         except Exception as e:
             print(f"Error showing game: {e}")
@@ -483,9 +483,9 @@ async def wordle_callback(_, query: CallbackQuery):
         
         word = active_games[chat_id]["word"]
         
-        # Simplified end message
+        # Simplified end message with blockquote
         await query.message.edit_text(
-            f"🎮 **Game Ended!**\nWord was: **{word}**\nEnded by: {query.from_user.first_name}",
+            f"<blockquote>🎮 Game Ended!\nWord was: {word}\nEnded by: {query.from_user.first_name}</blockquote>",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
@@ -498,6 +498,11 @@ async def wordle_callback(_, query: CallbackQuery):
         except Exception as e:
             print(f"Error ending game: {e}")
             await query.answer("Error ending game. Try again.", show_alert=True)
+    
+    # Handle hint button
+    elif data == "hint":
+        # Forward to the hint handler
+        await wordle_hint_callback(_, query)
     
     # Handle wordle_start callback
     elif data == "start":
@@ -517,7 +522,7 @@ async def wordle_callback(_, query: CallbackQuery):
 
 @app.on_message(filters.command("wordlehelp"))
 async def wordle_help(_, message: Message):
-    help_text = """
+    help_text = """<blockquote>
 🎮 **Wordle Help**
 
 **Commands:**
@@ -531,7 +536,7 @@ async def wordle_help(_, message: Message):
 • 🟨 Right letter, wrong spot
 • 🟥 Letter not in word
 • 6 attempts maximum
-"""
+</blockquote>"""
     await message.reply_text(
         help_text,
         reply_markup=InlineKeyboardMarkup([
@@ -667,9 +672,9 @@ async def game_error_recovery_callback(_, query: CallbackQuery):
         if chat_id in active_games:
             del active_games[chat_id]
             
-        # Simplified reset message
+        # Simplified reset message with blockquote
         await query.message.edit_text(
-            "🎮 **Game Reset**\n\nThe game has been reset due to an error.",
+            "<blockquote>🎮 Game Reset\n\nThe game has been reset due to an error.</blockquote>",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
@@ -749,7 +754,6 @@ async def wordle_hint_callback(_, query: CallbackQuery):
                 extra_text=f"💡 {query.from_user.first_name} used a hint!"
             )
             
-            # Edit the message
             await query.message.edit_text(message, reply_markup=markup)
             
             # Add to cleanup list
@@ -762,6 +766,15 @@ async def wordle_hint_callback(_, query: CallbackQuery):
             pass
         except Exception as e:
             print(f"Error updating hint message: {e}")
+            # Try sending a new message if editing fails
+            new_message = await query.message.reply_text(
+                f"<blockquote>💡 {query.from_user.first_name} used a hint ({active_games[chat_id]['hints_used']}/3)!</blockquote>",
+                reply_markup=markup
+            )
+            # Add to cleanup list
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(new_message.id)
         
     except Exception as e:
         print(f"Error in hint callback: {e}")
