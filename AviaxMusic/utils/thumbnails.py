@@ -198,180 +198,186 @@ async def gen_thumb(videoid: str):
         if os.path.isfile(cache_path):
             # Update timestamp in cache for LRU implementation
             if videoid in processed_cache:
-                processed_cache[videoid] = {"last_used": time.time()}
+                processed_cache[videoid]["timestamp"] = time.time()
             return cache_path
-        
-        url = f"https://www.youtube.com/watch?v={videoid}"
-        results = VideosSearch(url, limit=1)
-        result = (await results.next())["result"][0]
-        
-        title = re.sub("\W+", " ", result.get("title", "Unsupported Title")).title()
-        duration = result.get("duration", "Live")
-        thumbnail = result.get("thumbnails", [{}])[0].get("url", "").split("?")[0]
-        views = result.get("viewCount", {}).get("short", "Unknown Views")
-        channel = result.get("channel", {}).get("name", "Unknown Channel")
-
-        if not thumbnail:
-            raise ValueError("No thumbnail URL found")
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(thumbnail) as resp:
-                if resp.status == 200:
-                    f = await aiofiles.open(f"cache/thumb{videoid}.png", mode="wb")
-                    await f.write(await resp.read())
-                    await f.close()
-        
-        # Process main background image
-        youtube = Image.open(f"cache/thumb{videoid}.png")
-        image_background = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
-        background = image_background.convert("RGBA")
-        
-        # Enhance background
-        background = enhance_thumbnail(background)
-        
-        # Create a circular thumbnail for the top-left corner
-        # Extract a square portion from the center of the image
-        square_size = min(background.width, background.height)
-        left = (background.width - square_size) // 2
-        top = (background.height - square_size) // 2
-        right = left + square_size
-        bottom = top + square_size
-        square_img = background.crop((left, top, right, bottom))
-        
-        # Create a circular mask
-        circle_size = 300  # Size of the circular thumbnail
-        circle_img = square_img.resize((circle_size, circle_size), Image.Resampling.LANCZOS)
-        
-        # Create the circular mask
-        mask = Image.new('L', (circle_size, circle_size), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.ellipse((0, 0, circle_size, circle_size), fill=255)
-        
-        # Create the circular thumbnail with white border
-        circle_border_size = 310  # Slightly larger for border
-        circle_border = Image.new('RGBA', (circle_border_size, circle_border_size), (255, 255, 255, 0))
-        circle_border_draw = ImageDraw.Draw(circle_border)
-        circle_border_draw.ellipse((0, 0, circle_border_size-1, circle_border_size-1), outline=(255, 255, 255, 255), width=5)
-        
-        # Apply the circular mask to the image
-        circle_output = Image.new('RGBA', (circle_size, circle_size), (0, 0, 0, 0))
-        circle_output.paste(circle_img, (0, 0), mask)
-        
-        # Add a green glow around the circular thumbnail
-        glow_size = circle_size + 20
-        glow_img = Image.new('RGBA', (glow_size, glow_size), (0, 0, 0, 0))
-        glow_draw = ImageDraw.Draw(glow_img)
-        
-        # Draw multiple circles for a glowing effect
-        for i in range(5):
-            glow_draw.ellipse(
-                (i, i, glow_size-i-1, glow_size-i-1),
-                outline=(0, 255, 0, 200 - i * 40),
-                width=2
-            )
-        
-        # Apply blur to the glow
-        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=3))
-        
-        # Create the final background with border
-        border_width = 12
-        final_width = 1280 + border_width*2
-        final_height = 720 + border_width*2
-        final_img = Image.new('RGBA', (final_width, final_height), (0, 0, 0, 0))
-        
-        # Draw green border with glow
-        border_draw = ImageDraw.Draw(final_img)
-        for offset in range(6):
-            border_draw.rectangle(
-                [(offset, offset), (final_width - offset - 1, final_height - offset - 1)],
-                outline=(0, 255, 0, 200 - offset * 30),
-                width=3
-            )
-        
-        # Add white border for extra visibility
-        border_draw.rectangle(
-            [(2, 2), (final_width - 3, final_height - 3)],
-            outline=(255, 255, 255, 200),
-            width=2
-        )
-        
-        # Paste the main background image
-        final_img.paste(background, (border_width, border_width))
-        
-        # Paste the glowing circle in the top-left corner
-        paste_x = border_width + 30
-        paste_y = border_width + 30
-        final_img.paste(glow_img, (paste_x - 10, paste_y - 10), glow_img)
-        
-        # Paste the circular thumbnail
-        final_img.paste(circle_output, (paste_x, paste_y), circle_output)
-        
-        # Paste the white border circle
-        final_img.paste(circle_border, (paste_x - 5, paste_y - 5), circle_border)
-        
-        # Add text with enhanced visibility
-        draw = ImageDraw.Draw(final_img)
-        font_title = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 60)  # Smaller title font
-        font_info = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30)   # Smaller info font
-        
-        # Create a semi-transparent overlay for text background at the bottom
-        overlay_height = 150
-        overlay = Image.new('RGBA', (final_width, overlay_height), (0, 0, 0, 180))
-        final_img.paste(overlay, (0, final_height - overlay_height), overlay)
-        
-        # Draw title with shadow - position it to the right of the circular thumbnail
-        title1 = truncate(title)
-        # First line of title - positioned at bottom of the image with better visibility
-        draw_text_with_shadow(
-            final_img, draw, 
-            (border_width + 40, final_height - overlay_height + 20), 
-            title1[0], font_title, 'white', 
-            shadow_offset=(3, 3), shadow_blur=5
-        )
-        
-        # Second line of title if it exists
-        if title1[1]:
-            draw_text_with_shadow(
-                final_img, draw, 
-                (border_width + 40, final_height - overlay_height + 90), 
-                title1[1], font_title, 'white', 
-                shadow_offset=(3, 3), shadow_blur=5
-            )
-        
-        # Add duration info - position near the circular thumbnail
-        draw_text_with_shadow(
-            final_img, draw, 
-            (paste_x + circle_size + 30, paste_y + 20), 
-            f"Duration: {duration}", font_info, 'white', 
-            shadow_offset=(2, 2), shadow_blur=2
-        )
-        
-        # Add channel info 
-        draw_text_with_shadow(
-            final_img, draw, 
-            (paste_x + circle_size + 30, paste_y + 60), 
-            f"Channel: {channel}", font_info, 'white', 
-            shadow_offset=(2, 2), shadow_blur=2
-        )
-        
-        # Convert and save the final image
-        final_img = final_img.convert("RGB")
-        final_img.save(cache_path)
-        
-        # Add to cache with timestamp
-        processed_cache[videoid] = {"last_used": time.time()}
-        
-        # Clean up temporary file
-        try:
-            os.remove(f"cache/thumb{videoid}.png")
-        except:
-            pass
             
-        return cache_path
+        # Check if memory usage is too high
+        if psutil.virtual_memory().percent > 85:
+            await optimize_memory_usage()
+        
+        if videoid == "telegram":
+            # Create simplified thumbnail for Telegram media
+            image = Image.new("RGB", (1280, 720), (0, 0, 0))
+            color = random_color()
+            # Make a gradient background
+            background = generate_gradient(1280, 720, (30, 30, 30), (color[0], color[1], color[2], 150))
+            
+            # Load a default icon
+            icon_path = "assets/Telegram.png"
+            if os.path.exists(icon_path):
+                icon = Image.open(icon_path)
+                # Make circular icon with enhanced border
+                icon_size = 320  # Increased size for better visibility
+                icon = crop_center_circle(icon, icon_size)
+                # Center the icon
+                background.paste(icon, (480, 160), icon)  # Adjusted position
+            
+            # Add enhanced green boundary
+            background = add_green_boundary(background)
+            
+            # Enhance the final thumbnail
+            background = enhance_thumbnail(background)
+            
+            if not os.path.exists("cache"):
+                os.makedirs("cache")
+            
+            # Save with optimization
+            background.save(cache_path, format="PNG", optimize=True)
+            
+            # Add to cache dict for LRU tracking
+            processed_cache[videoid] = {"timestamp": time.time(), "path": cache_path}
+            
+            # Clean cache if it's getting too large
+            if len(processed_cache) > CACHE_SIZE:
+                await cleanup_old_thumbnails()
+            
+            return cache_path
+            
+        results = VideosSearch(videoid, limit=1)
+        async for result in results.next():
+            try:
+                title = result["title"][:50]
+                title = re.sub(r"\W+", " ", title)
+                title = title.title()
+            except:
+                title = "Unsupported Title"
+            
+            try:
+                duration = result["duration"]
+            except:
+                duration = "Unknown Duration"
+            
+            try:
+                thumbnail = result["thumbnails"][0]["url"].split("?")[0]
+            except:
+                thumbnail = "https://te.legra.ph/file/d5b8b91d5d8093dd9bc64.jpg"
+            
+            try:
+                result["viewCount"]["text"]
+            except:
+                pass
+            
+            try:
+                result["channel"]["name"]
+            except:
+                pass
+            
+            thumbnail = await get_image(thumbnail)
+            if not thumbnail:
+                return "assets/Thumbnail.jpg"
+            
+            # Process image for better display
+            image = Image.open(thumbnail)
+            
+            # Improved image processing for better quality
+            
+            # Resize and crop to 16:9 aspect ratio if needed
+            width, height = image.size
+            if width/height != 16/9:
+                # Calculate target dimensions
+                if width/height > 16/9:
+                    # Image is wider than 16:9
+                    new_width = int(height * 16/9)
+                    left = (width - new_width) // 2
+                    image = image.crop((left, 0, left + new_width, height))
+                else:
+                    # Image is taller than 16:9
+                    new_height = int(width * 9/16)
+                    top = (height - new_height) // 2
+                    image = image.crop((0, top, width, top + new_height))
+            
+            # Resize to standard size for consistency
+            image = image.resize((1280, 720), Image.Resampling.LANCZOS)
+            
+            # Enhanced image processing
+            image = enhance_thumbnail(image)
+            
+            # Create a background with gradient
+            background = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
+            color = random_color()
+            overlay = generate_gradient(1280, 720, (30, 30, 30, 220), (color[0], color[1], color[2], 80))
+            
+            # Blend the image with background
+            background.paste(image, (0, 0))
+            background = Image.alpha_composite(background.convert("RGBA"), overlay)
+            
+            # Add a green boundary
+            background = add_green_boundary(background)
+            
+            # Load logo for the profile pic
+            logo = "assets/logo.png"
+            if os.path.exists(logo):
+                circle_logo = crop_center_circle(Image.open(logo), 160)  # Decreased size
+                # Position in the bottom-left corner with padding
+                background.paste(circle_logo, (70, 480), circle_logo)  # Adjusted position
+            
+            # Load fonts
+            try:
+                font_file = "assets/font2.ttf"
+                font_file_bold = "assets/font2.ttf"
+                
+                # Add title text with shadow
+                title_font = ImageFont.truetype(font_file_bold, 38)  # Decreased font size
+                draw = ImageDraw.Draw(background)
+                
+                title_lines = truncate(title)
+                y_position = 180  # Adjusted position
+                
+                for line in title_lines:
+                    if line:
+                        # Add text shadow for readability
+                        draw_text_with_shadow(
+                            background, draw, 
+                            (340, y_position),  # Adjusted position to make image appear larger
+                            line, title_font, "white"
+                        )
+                        y_position += 55
+                
+                # Add duration text
+                duration_font = ImageFont.truetype(font_file, 28)  # Decreased font size
+                draw_text_with_shadow(
+                    background, draw, 
+                    (340, y_position + 15),  # Adjusted position
+                    f"Duration: {duration}", duration_font, "white"
+                )
+                
+                # Save optimized image
+                if not os.path.exists("cache"):
+                    os.makedirs("cache")
+                
+                background = background.convert("RGB")
+                background.save(cache_path, format="PNG", optimize=True)
+                
+                # Add to cache dict for LRU tracking
+                processed_cache[videoid] = {"timestamp": time.time(), "path": cache_path}
+                
+                # Clean cache if it's getting too large
+                if len(processed_cache) > CACHE_SIZE:
+                    await cleanup_old_thumbnails()
+                
+                return cache_path
+            except Exception as e:
+                print(f"Error in thumbnail text rendering: {e}")
+                # If error in text, still try to save the image without text
+                if not os.path.exists("cache"):
+                    os.makedirs("cache")
+                background = background.convert("RGB")
+                background.save(cache_path, format="PNG", optimize=True)
+                return cache_path
+                
     except Exception as e:
         print(f"Error in thumbnail generation: {e}")
-        # Use a default thumbnail if generation fails
-        return "AviaxMusic/assets/thumbnail.png"
+        return "assets/Thumbnail.jpg"
 
 # Clean up old thumbnails periodically
 async def cleanup_old_thumbnails():
@@ -391,7 +397,7 @@ async def cleanup_old_thumbnails():
             if len(processed_cache) > CACHE_SIZE:
                 # Sort by last used timestamp and remove oldest entries
                 items = list(processed_cache.items())
-                items.sort(key=lambda x: x[1]["last_used"])
+                items.sort(key=lambda x: x[1]["timestamp"])
                 # Remove the oldest half
                 for i in range(len(items) // 2):
                     processed_cache.pop(items[i][0], None)

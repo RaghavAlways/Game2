@@ -52,8 +52,31 @@ def track_markup(_, videoid, user_id, channel, fplay):
 
 
 def stream_markup_timer(_, videoid, chat_id, played, dur):
-    bars = random.randint(10, 20)
-    bar = "ﮩ٨ـﮩﮩ٨ـ♡ﮩ٨ـﮩﮩ٨ـ"
+    played_sec = time_to_seconds(played)
+    duration_sec = time_to_seconds(dur)
+    percentage = (played_sec / duration_sec) * 100
+    anon = math.floor(percentage)
+    if 0 < anon <= 10:
+        bar = "⬤─────────"
+    elif 10 < anon < 20:
+        bar = "━⬤────────"
+    elif 20 <= anon < 30:
+        bar = "━━⬤───────"
+    elif 30 <= anon < 40:
+        bar = "━━━⬤──────"
+    elif 40 <= anon < 50:
+        bar = "━━━━⬤─────"
+    elif 50 <= anon < 60:
+        bar = "━━━━━⬤────"
+    elif 60 <= anon < 70:
+        bar = "━━━━━━⬤───"
+    elif 70 <= anon < 80:
+        bar = "━━━━━━━⬤──"
+    elif 80 <= anon < 95:
+        bar = "━━━━━━━━⬤─"
+    else:
+        bar = "━━━━━━━━━⬤"
+
     buttons = [
         [
             InlineKeyboardButton(
@@ -78,11 +101,11 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
         ],
@@ -91,8 +114,31 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
 
 
 def telegram_markup_timer(_, chat_id, played, dur):
-    bars = random.randint(10, 20)
-    bar = "ﮩ٨ـﮩﮩ٨ـ♡ﮩ٨ـﮩﮩ٨ـ"
+    played_sec = time_to_seconds(played)
+    duration_sec = time_to_seconds(dur)
+    percentage = (played_sec / duration_sec) * 100
+    anon = math.floor(percentage)
+    if 0 < anon <= 10:
+        bar = "⬤─────────"
+    elif 10 < anon < 20:
+        bar = "━⬤────────"
+    elif 20 <= anon < 30:
+        bar = "━━⬤───────"
+    elif 30 <= anon < 40:
+        bar = "━━━⬤──────"
+    elif 40 <= anon < 50:
+        bar = "━━━━⬤─────"
+    elif 50 <= anon < 60:
+        bar = "━━━━━⬤────"
+    elif 60 <= anon < 70:
+        bar = "━━━━━━⬤───"
+    elif 70 <= anon < 80:
+        bar = "━━━━━━━⬤──"
+    elif 80 <= anon < 95:
+        bar = "━━━━━━━━⬤─"
+    else:
+        bar = "━━━━━━━━━⬤"
+
     buttons = [
         [
             InlineKeyboardButton(
@@ -117,11 +163,11 @@ def telegram_markup_timer(_, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
         ],
@@ -159,11 +205,11 @@ def stream_markup(_, videoid=None, chat_id=None):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
         ],
@@ -191,11 +237,11 @@ def telegram_markup(_, chat_id):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
         ],
@@ -217,15 +263,13 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
-        ],
-        [
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
                 callback_data=f"forceclose {videoid}|{user_id}",
@@ -245,15 +289,13 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
-        ],
-        [
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
                 callback_data=f"forceclose {videoid}|{user_id}",
@@ -292,11 +334,11 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
+                text="🍿 Movie",
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="Play Game",
+                text="🎮 Game",
                 callback_data="start_wordle",
             ),
         ],
