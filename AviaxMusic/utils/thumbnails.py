@@ -87,23 +87,36 @@ def crop_center_circle(img, output_size, border, border_color, crop_scale=1.5):
         )
     )
     
-    img = img.resize((output_size - 2*border, output_size - 2*border))
+    # Resize the image slightly smaller to accommodate white border
+    inner_size = output_size - 2*border - 8  # 8 pixels for white border
+    img = img.resize((inner_size, inner_size))
     
+    # Create final image with transparent background
+    final_img = Image.new("RGBA", (output_size, output_size), (0, 0, 0, 0))
     
-    final_img = Image.new("RGBA", (output_size, output_size), border_color)
+    # Create white border circle
+    white_border = Image.new("RGBA", (output_size - 2*border, output_size - 2*border), (255, 255, 255, 255))
+    white_mask = Image.new("L", (output_size - 2*border, output_size - 2*border), 0)
+    white_draw = ImageDraw.Draw(white_mask)
+    white_draw.ellipse((0, 0, output_size - 2*border, output_size - 2*border), fill=255)
     
-    
-    mask_main = Image.new("L", (output_size - 2*border, output_size - 2*border), 0)
+    # Create inner circle mask for main image
+    mask_main = Image.new("L", (inner_size, inner_size), 0)
     draw_main = ImageDraw.Draw(mask_main)
-    draw_main.ellipse((0, 0, output_size - 2*border, output_size - 2*border), fill=255)
+    draw_main.ellipse((0, 0, inner_size, inner_size), fill=255)
     
-    final_img.paste(img, (border, border), mask_main)
-    
-    
+    # Create outer border mask
     mask_border = Image.new("L", (output_size, output_size), 0)
     draw_border = ImageDraw.Draw(mask_border)
     draw_border.ellipse((0, 0, output_size, output_size), fill=255)
     
+    # Paste white border
+    final_img.paste(white_border, (border, border), white_mask)
+    
+    # Paste main image with slight offset for white border
+    final_img.paste(img, (border + 4, border + 4), mask_main)
+    
+    # Apply final circular mask
     result = Image.composite(final_img, Image.new("RGBA", final_img.size, (0, 0, 0, 0)), mask_border)
     
     return result
@@ -197,14 +210,14 @@ async def gen_thumb(videoid: str):
         image1 = youtube.resize(changeImageSize(1280, 720, youtube.size))
         background = image1.convert("RGBA")
         
-        # Create circular thumbnail
+        # Create circular thumbnail with white border
         circle_thumbnail = crop_center_circle(youtube, 400, 20, (0, 255, 0, 180))
         circle_thumbnail = circle_thumbnail.resize((400, 400))
         circle_position = (120, 160)
         
         # Apply optimized effects
         background = enhance_thumbnail(background)
-        background = background.filter(ImageFilter.BoxBlur(10))  # Reduced blur radius
+        background = background.filter(ImageFilter.BoxBlur(10))
         background = ImageEnhance.Brightness(background).enhance(0.6)
         
         # Generate and blend gradient
@@ -237,7 +250,7 @@ async def gen_thumb(videoid: str):
         # Composite with glow
         background = Image.alpha_composite(bordered_bg, glow)
         
-        # Paste circular thumbnail
+        # Paste circular thumbnail with white border
         background.paste(circle_thumbnail, circle_position, circle_thumbnail)
         
         # Draw text and elements
