@@ -9,31 +9,51 @@ import aiofiles
 import aiohttp
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from youtubesearchpython.__future__ import VideosSearch
+import asyncio
+from functools import lru_cache
+import time
 
 logging.basicConfig(level=logging.INFO)
 
-def changeImageSize(maxWidth, maxHeight, image):
-    widthRatio = maxWidth / image.size[0]
-    heightRatio = maxHeight / image.size[1]
-    newWidth = int(widthRatio * image.size[0])
-    newHeight = int(heightRatio * image.size[1])
-    newImage = image.resize((newWidth, newHeight))
-    return newImage
+# Cache for processed images
+CACHE_SIZE = 100
+processed_cache = {}
+
+@lru_cache(maxsize=50)
+def changeImageSize(maxWidth, maxHeight, image_size):
+    widthRatio = maxWidth / image_size[0]
+    heightRatio = maxHeight / image_size[1]
+    newWidth = int(widthRatio * image_size[0])
+    newHeight = int(heightRatio * image_size[1])
+    return (newWidth, newHeight)
 
 def truncate(text):
-    list = text.split(" ")
-    text1 = ""
-    text2 = ""    
-    for i in list:
-        if len(text1) + len(i) < 30:        
-            text1 += " " + i
-        elif len(text2) + len(i) < 30:       
-            text2 += " " + i
+    if not text:
+        return ["", ""]
+    words = text.split()
+    text1 = []
+    text2 = []
+    len1 = 0
+    
+    for word in words:
+        word_len = len(word) + 1  # +1 for space
+        if len1 + word_len < 30:
+            text1.append(word)
+            len1 += word_len
+        else:
+            text2.append(word)
+            
+    return [" ".join(text1), " ".join(text2)]
 
-    text1 = text1.strip()
-    text2 = text2.strip()     
-    return [text1,text2]
+# Predefine common colors
+COLORS = {
+    'transparent': (0, 0, 0, 0),
+    'black': (0, 0, 0, 255),
+    'white': (255, 255, 255, 255),
+    'green': (0, 255, 0, 180)
+}
 
+@lru_cache(maxsize=20)
 def random_color():
     return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
@@ -41,9 +61,7 @@ def generate_gradient(width, height, start_color, end_color):
     base = Image.new('RGBA', (width, height), start_color)
     top = Image.new('RGBA', (width, height), end_color)
     mask = Image.new('L', (width, height))
-    mask_data = []
-    for y in range(height):
-        mask_data.extend([int(60 * (y / height))] * width)
+    mask_data = [int(60 * (y / height)) for y in range(height) for x in range(width)]
     mask.putdata(mask_data)
     base.paste(top, (0, 0), mask)
     return base
@@ -133,56 +151,39 @@ def add_green_boundary(image, border_width=3, border_color=(0, 255, 0, 255)):
     return new_image
 
 def enhance_thumbnail(image):
-    """Enhance thumbnail with cool effects"""
-    # Increase contrast
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.2)
+    """Optimized thumbnail enhancement"""
+    enhancers = [
+        (ImageEnhance.Contrast, 1.2),
+        (ImageEnhance.Sharpness, 1.2),
+        (ImageEnhance.Brightness, 1.1)
+    ]
     
-    # Increase sharpness
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(1.2)
-    
-    # Slightly increase brightness
-    enhancer = ImageEnhance.Brightness(image)
-    image = enhancer.enhance(1.1)
-    
+    for enhancer_class, factor in enhancers:
+        image = enhancer_class(image).enhance(factor)
     return image
 
 async def gen_thumb(videoid: str):
     try:
-        if os.path.isfile(f"cache/{videoid}_v4.png"):
-            return f"cache/{videoid}_v4.png"
+        cache_path = f"cache/{videoid}_v4.png"
+        if os.path.isfile(cache_path):
+            return cache_path
+
+        # Check memory cache
+        if videoid in processed_cache:
+            return processed_cache[videoid]
 
         url = f"https://www.youtube.com/watch?v={videoid}"
         results = VideosSearch(url, limit=1)
-        for result in (await results.next())["result"]:
-            title = result.get("title")
-            if title:
-                title = re.sub("\W+", " ", title).title()
-            else:
-                title = "Unsupported Title"
-            duration = result.get("duration")
-            if not duration:
-                duration = "Live"
-            thumbnail_data = result.get("thumbnails")
-            if thumbnail_data:
-                thumbnail = thumbnail_data[0]["url"].split("?")[0]
-            else:
-                thumbnail = None
-            views_data = result.get("viewCount")
-            if views_data:
-                views = views_data.get("short")
-                if not views:
-                    views = "Unknown Views"
-            else:
-                views = "Unknown Views"
-            channel_data = result.get("channel")
-            if channel_data:
-                channel = channel_data.get("name")
-                if not channel:
-                    channel = "Unknown Channel"
-            else:
-                channel = "Unknown Channel"
+        result = (await results.next())["result"][0]
+        
+        title = re.sub("\W+", " ", result.get("title", "Unsupported Title")).title()
+        duration = result.get("duration", "Live")
+        thumbnail = result.get("thumbnails", [{}])[0].get("url", "").split("?")[0]
+        views = result.get("viewCount", {}).get("short", "Unknown Views")
+        channel = result.get("channel", {}).get("name", "Unknown Channel")
+
+        if not thumbnail:
+            raise ValueError("No thumbnail URL found")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(thumbnail) as resp:
@@ -191,83 +192,89 @@ async def gen_thumb(videoid: str):
                     await f.write(await resp.read())
                     await f.close()
 
+        # Process image
         youtube = Image.open(f"cache/thumb{videoid}.png")
-        image1 = changeImageSize(1280, 720, youtube)
-        image2 = image1.convert("RGBA")
+        image1 = youtube.resize(changeImageSize(1280, 720, youtube.size))
+        background = image1.convert("RGBA")
         
-        # Apply enhanced effects
-        background = enhance_thumbnail(image2)
+        # Apply optimized effects
+        background = enhance_thumbnail(background)
+        background = background.filter(ImageFilter.BoxBlur(10))  # Reduced blur radius
+        background = ImageEnhance.Brightness(background).enhance(0.6)
         
-        # Add blur effect
-        background = background.filter(filter=ImageFilter.BoxBlur(20))
-        enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.6)
+        # Generate and blend gradient
+        gradient_colors = (random_color(), random_color())
+        gradient = generate_gradient(1280, 720, *gradient_colors)
+        background = Image.blend(background, gradient, 0.2)
         
-        # Add gradient with random colors
-        start_gradient_color = random_color()
-        end_gradient_color = random_color()
-        gradient_image = generate_gradient(1280, 720, start_gradient_color, end_gradient_color)
-        background = Image.blend(background, gradient_image, alpha=0.2)
-        
-        # Add green boundary with glow
-        background = add_green_boundary(background, border_width=5, border_color=(0, 255, 0, 180))
-        
+        # Draw text and elements
         draw = ImageDraw.Draw(background)
-        arial = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30)
-        font = ImageFont.truetype("AviaxMusic/assets/font.ttf", 30)
-        title_font = ImageFont.truetype("AviaxMusic/assets/font3.ttf", 45)
+        fonts = {
+            'title': ImageFont.truetype("AviaxMusic/assets/font3.ttf", 45),
+            'arial': ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30),
+            'normal': ImageFont.truetype("AviaxMusic/assets/font.ttf", 30)
+        }
 
-        # Create enhanced circular thumbnail
-        circle_thumbnail = crop_center_circle(youtube, 400, 20, start_gradient_color)
-        circle_thumbnail = circle_thumbnail.resize((400, 400))
-        circle_position = (120, 160)
-        background.paste(circle_thumbnail, circle_position, circle_thumbnail)
+        # Add text
+        title_parts = truncate(title)
+        text_positions = [
+            (565, 180, title_parts[0], fonts['title'], COLORS['white']),
+            (565, 230, title_parts[1], fonts['title'], COLORS['white']),
+            (565, 320, f"{channel}  |  {views[:23]}", fonts['arial'], COLORS['white'])
+        ]
 
-        # Add text with shadow effects
-        text_x_position = 565
-        title1 = truncate(title)
-        draw_text_with_shadow(background, draw, (text_x_position, 180), title1[0], title_font, (255, 255, 255))
-        draw_text_with_shadow(background, draw, (text_x_position, 230), title1[1], title_font, (255, 255, 255))
-        draw_text_with_shadow(background, draw, (text_x_position, 320), f"{channel}  |  {views[:23]}", arial, (255, 255, 255))
+        for x, y, text, font, color in text_positions:
+            draw.text((x+2, y+2), text, font=font, fill=COLORS['black'])  # Shadow
+            draw.text((x, y), text, font=font, fill=color)
 
-        # Add enhanced progress line
-        line_length = 580
-        line_color = (0, 255, 0, 180)  # Green color matching boundary
-
+        # Add progress line
         if duration != "Live":
-            color_line_percentage = random.uniform(0.15, 0.85)
-            color_line_length = int(line_length * color_line_percentage)
-            white_line_length = line_length - color_line_length
-
-            # Draw progress line with glow effect
-            glow = Image.new('RGBA', background.size, (0, 0, 0, 0))
-            glow_draw = ImageDraw.Draw(glow)
+            line_start = 565
+            line_length = 580
+            progress = random.uniform(0.15, 0.85)
             
-            # Draw colored part
-            glow_draw.line(
-                [(text_x_position, 380), (text_x_position + color_line_length, 380)],
-                fill=line_color,
+            # Draw progress line
+            draw.line(
+                [(line_start, 380), (line_start + line_length * progress, 380)],
+                fill=COLORS['green'],
                 width=4
             )
-            
-            # Draw white part
-            glow_draw.line(
-                [(text_x_position + color_line_length, 380), (text_x_position + line_length, 380)],
+            draw.line(
+                [(line_start + line_length * progress, 380), (line_start + line_length, 380)],
                 fill=(200, 200, 200, 180),
                 width=4
             )
             
-            # Apply glow
-            glow = glow.filter(ImageFilter.GaussianBlur(radius=2))
-            background = Image.alpha_composite(background, glow)
+            # Add duration
+            draw.text((line_start, 400), duration, font=fonts['arial'], fill=COLORS['white'])
 
-            # Add duration text with shadow
-            draw_text_with_shadow(background, draw, (text_x_position, 400), duration, arial, (255, 255, 255))
-
+        # Save and cache
         background = background.convert("RGB")
-        background.save(f"cache/{videoid}_v4.png")
-        return f"cache/{videoid}_v4.png"
+        background.save(cache_path, optimize=True, quality=95)
+        
+        # Update memory cache
+        processed_cache[videoid] = cache_path
+        if len(processed_cache) > CACHE_SIZE:
+            processed_cache.pop(next(iter(processed_cache)))
+        
+        return cache_path
 
     except Exception as e:
         logging.error(f"Error generating thumbnail: {e}")
         return None
+
+# Clean up old thumbnails periodically
+async def cleanup_old_thumbnails():
+    while True:
+        try:
+            current_time = time.time()
+            cache_dir = "cache"
+            for file in os.listdir(cache_dir):
+                file_path = os.path.join(cache_dir, file)
+                if os.path.isfile(file_path):
+                    # Remove files older than 24 hours
+                    if current_time - os.path.getctime(file_path) > 86400:
+                        os.remove(file_path)
+        except Exception as e:
+            logging.error(f"Error in cleanup: {e}")
+        await asyncio.sleep(3600)  # Run every hour
