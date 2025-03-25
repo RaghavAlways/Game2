@@ -14,6 +14,12 @@ Available Games:
 1. 🎯 **Hangman** - Classic word guessing game
    • Command: /hangman
    • Help: /hangmanhelp
+   • Features:
+     - Multiple players support
+     - Turn-based gameplay
+     - Score tracking
+     - Different word categories
+     - Interactive buttons
 
 More games coming soon! Choose a game to start playing.
 """,
@@ -32,19 +38,19 @@ async def get_movie_callback(_, query: CallbackQuery):
     try:
         await query.message.reply_text(
             """
-🎬 **Welcome to Movie Zone!**
+🎬 **Movie Zone**
 
-Join our movie channel to get:
+Join our movie channel for:
 • Latest Movies
 • TV Shows
 • Web Series
 • Anime
 • And much more!
 
-📺 Join Now: @LB_Movies
+📺 @LB_Movies
 """,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🍿 Join Movie Channel 🍿", url="https://t.me/LB_Movies")],
+                [InlineKeyboardButton("🍿 Join Channel 🍿", url="https://t.me/LB_Movies")],
                 [InlineKeyboardButton("❌ Close", callback_data="close")]
             ])
         )
