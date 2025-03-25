@@ -10,7 +10,7 @@ API_ID = int(getenv("API_ID", "28580773"))
 API_HASH = getenv("API_HASH", "f80e465a8805bee5c6bf29fa12d6cc0c")
 
 # Get your token from @BotFather on Telegram.
-BOT_TOKEN = getenv("BOT_TOKEN", "5759235328:AAFbYauh_WSDKmofoWkqoD50gKQbzsd9Gt8")
+BOT_TOKEN = getenv("BOT_TOKEN", "5759235328:AAEOSsYK13hbdSaNLfwj5yfanqWa9TiKXdE")
 
 # Get your mongo url from cloud.mongodb.com
 MONGO_DB_URI = getenv("MONGO_DB_URI", "mongodb+srv://Visionbot:Visionbot@visionbot.bhbwcls.mongodb.net/?retryWrites=true&w=majority&appName=Visionbot")
