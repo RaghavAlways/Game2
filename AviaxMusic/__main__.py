@@ -12,6 +12,10 @@ from AviaxMusic.plugins import ALL_MODULES
 from AviaxMusic.utils.database import get_banned_users, get_gbanned
 from config import BANNED_USERS
 
+# Import background tasks from our new modules
+from AviaxMusic.utils.thumbnails import cleanup_old_thumbnails, optimize_memory_usage
+from AviaxMusic.plugins.bot.game_recovery import detect_and_fix_stuck_games
+
 
 async def init():
     if (
@@ -49,6 +53,13 @@ async def init():
     except:
         pass
     await Aviax.decorators()
+    
+    # Start background tasks
+    LOGGER("AviaxMusic").info("Starting background maintenance tasks...")
+    asyncio.create_task(cleanup_old_thumbnails())
+    asyncio.create_task(optimize_memory_usage())
+    asyncio.create_task(detect_and_fix_stuck_games())
+    
     LOGGER("AviaxMusic").info(
         "\x41\x76\x69\x61\x78\x20\x4d\x75\x73\x69\x63\x20\x53\x74\x61\x72\x74\x65\x64\x20\x53\x75\x63\x63\x65\x73\x73\x66\x75\x6c\x6c\x79\x2e\x0a\x0a\x44\x6f\x6e\x27\x74\x20\x66\x6f\x72\x67\x65\x74\x20\x74\x6f\x20\x76\x69\x73\x69\x74\x20\x40\x41\x76\x69\x61\x78\x4f\x66\x66\x69\x63\x69\x61\x6c"
     )
