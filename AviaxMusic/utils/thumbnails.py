@@ -7,6 +7,7 @@ import os
 import re
 import aiofiles
 import aiohttp
+import psutil
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from youtubesearchpython.__future__ import VideosSearch
 import asyncio
@@ -15,7 +16,7 @@ import time
 
 logging.basicConfig(level=logging.INFO)
 
-# Cache for processed images
+# Cache for processed images with timestamps for LRU implementation
 CACHE_SIZE = 100
 processed_cache = {}
 
@@ -26,6 +27,14 @@ def changeImageSize(maxWidth, maxHeight, image_size):
     newWidth = int(widthRatio * image_size[0])
     newHeight = int(heightRatio * image_size[1])
     return (newWidth, newHeight)
+
+@lru_cache(maxsize=50)
+def get_text_dimensions(text, font):
+    """Get the dimensions of a text with a specific font (cached for performance)"""
+    # Create a dummy image to measure text size
+    dummy_img = Image.new('RGB', (1, 1))
+    dummy_draw = ImageDraw.Draw(dummy_img)
+    return dummy_draw.textbbox((0, 0), text, font=font)[2:4]  # width, height
 
 def truncate(text):
     if not text:
@@ -115,21 +124,21 @@ def crop_center_circle(img, output_size, border_width=10):
     return output
 
 def draw_text_with_shadow(background, draw, position, text, font, fill, shadow_offset=(3, 3), shadow_blur=5):
+    # Get text dimensions for better positioning
+    text_width, text_height = get_text_dimensions(text, font)
     
     shadow = Image.new('RGBA', background.size, (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     
-    
     shadow_draw.text(position, text, font=font, fill="black")
-    
     
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=shadow_blur))
     
-    
     background.paste(shadow, shadow_offset, shadow)
     
-    
     draw.text(position, text, font=font, fill=fill)
+    
+    return text_width, text_height
 
 def add_green_boundary(image, border_width=6, border_color=(0, 255, 0, 255)):
     """Add an enhanced green boundary line to the image with multiple glow layers"""
@@ -184,8 +193,13 @@ def enhance_thumbnail(image):
 
 async def gen_thumb(videoid: str):
     try:
-        if os.path.isfile(f"cache/{videoid}_v4.png"):
-            return f"cache/{videoid}_v4.png"
+        # Check cache first to avoid reprocessing
+        cache_path = f"cache/{videoid}_v4.png"
+        if os.path.isfile(cache_path):
+            # Update timestamp in cache for LRU implementation
+            if videoid in processed_cache:
+                processed_cache[videoid] = {"last_used": time.time()}
+            return cache_path
         
         url = f"https://www.youtube.com/watch?v={videoid}"
         results = VideosSearch(url, limit=1)
@@ -342,7 +356,10 @@ async def gen_thumb(videoid: str):
         
         # Convert and save the final image
         final_img = final_img.convert("RGB")
-        final_img.save(f"cache/{videoid}_v4.png")
+        final_img.save(cache_path)
+        
+        # Add to cache with timestamp
+        processed_cache[videoid] = {"last_used": time.time()}
         
         # Clean up temporary file
         try:
@@ -350,7 +367,7 @@ async def gen_thumb(videoid: str):
         except:
             pass
             
-        return f"cache/{videoid}_v4.png"
+        return cache_path
     except Exception as e:
         print(f"Error in thumbnail generation: {e}")
         # Use a default thumbnail if generation fails
@@ -368,6 +385,48 @@ async def cleanup_old_thumbnails():
                     # Remove files older than 24 hours
                     if current_time - os.path.getctime(file_path) > 86400:
                         os.remove(file_path)
+                        print(f"Removed old thumbnail: {file}")
+                        
+            # Also clean up the processed_cache to avoid memory leaks
+            if len(processed_cache) > CACHE_SIZE:
+                # Sort by last used timestamp and remove oldest entries
+                items = list(processed_cache.items())
+                items.sort(key=lambda x: x[1]["last_used"])
+                # Remove the oldest half
+                for i in range(len(items) // 2):
+                    processed_cache.pop(items[i][0], None)
+                print(f"Cache optimized: removed {len(items) // 2} older thumbnail references")
+                
         except Exception as e:
             logging.error(f"Error in cleanup: {e}")
         await asyncio.sleep(3600)  # Run every hour
+
+# Memory management for thumbnail generation
+async def optimize_memory_usage():
+    """Periodically clear caches if memory usage is too high"""
+    while True:
+        try:
+            # Get current memory usage
+            memory = psutil.virtual_memory()
+            memory_percent = memory.percent
+            
+            # If memory usage is too high (>85%), clear caches
+            if memory_percent > 85:
+                # Clear LRU cache
+                changeImageSize.cache_clear()
+                get_text_dimensions.cache_clear()
+                random_color.cache_clear()
+                
+                # Clear processed_cache
+                processed_cache.clear()
+                
+                logging.info(f"Memory usage was high ({memory_percent}%). Cleared caches.")
+                
+                # Force garbage collection
+                import gc
+                gc.collect()
+                
+        except Exception as e:
+            logging.error(f"Error in memory optimization: {e}")
+        
+        await asyncio.sleep(300)  # Check every 5 minutes
