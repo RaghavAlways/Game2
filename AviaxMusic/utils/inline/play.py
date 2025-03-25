@@ -77,8 +77,7 @@ def stream_markup_timer(_, chat_id, played, dur):
                 text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             )
-        ],
-        [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")],
+        ]
     ]
     return buttons
 
@@ -97,8 +96,7 @@ def stream_markup(_, chat_id):
                 text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             )
-        ],
-        [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")],
+        ]
     ]
     return buttons
 

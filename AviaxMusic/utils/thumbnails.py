@@ -197,6 +197,11 @@ async def gen_thumb(videoid: str):
         image1 = youtube.resize(changeImageSize(1280, 720, youtube.size))
         background = image1.convert("RGBA")
         
+        # Create circular thumbnail
+        circle_thumbnail = crop_center_circle(youtube, 400, 20, (0, 255, 0, 180))
+        circle_thumbnail = circle_thumbnail.resize((400, 400))
+        circle_position = (120, 160)
+        
         # Apply optimized effects
         background = enhance_thumbnail(background)
         background = background.filter(ImageFilter.BoxBlur(10))  # Reduced blur radius
@@ -206,6 +211,34 @@ async def gen_thumb(videoid: str):
         gradient_colors = (random_color(), random_color())
         gradient = generate_gradient(1280, 720, *gradient_colors)
         background = Image.blend(background, gradient, 0.2)
+        
+        # Add green boundary with glow
+        border_color = (0, 255, 0, 180)
+        border_width = 5
+        
+        # Create a new image with border
+        bordered_bg = Image.new("RGBA", (1280 + 2*border_width, 720 + 2*border_width), (0, 0, 0, 0))
+        
+        # Create glow effect
+        glow = Image.new("RGBA", bordered_bg.size, (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow)
+        glow_draw.rectangle(
+            [(0, 0), (bordered_bg.width, bordered_bg.height)],
+            outline=border_color,
+            width=border_width
+        )
+        
+        # Apply blur to create glow
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=3))
+        
+        # Paste the background
+        bordered_bg.paste(background, (border_width, border_width))
+        
+        # Composite with glow
+        background = Image.alpha_composite(bordered_bg, glow)
+        
+        # Paste circular thumbnail
+        background.paste(circle_thumbnail, circle_position, circle_thumbnail)
         
         # Draw text and elements
         draw = ImageDraw.Draw(background)
