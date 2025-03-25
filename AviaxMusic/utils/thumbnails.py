@@ -184,114 +184,90 @@ async def gen_thumb(videoid: str):
             else:
                 channel = "Unknown Channel"
 
-        
         async with aiohttp.ClientSession() as session:
             async with session.get(thumbnail) as resp:
-        
-                content = await resp.read()
                 if resp.status == 200:
-                    content_type = resp.headers.get('Content-Type')
-                    if 'jpeg' in content_type or 'jpg' in content_type:
-                        extension = 'jpg'
-                    elif 'png' in content_type:
-                        extension = 'png'
-                    else:
-                        logging.error(f"Unexpected content type: {content_type}")
-                        return None
-
-                    filepath = f"cache/thumb{videoid}.png"
-                    f = await aiofiles.open(filepath, mode="wb")
+                    f = await aiofiles.open(f"cache/thumb{videoid}.png", mode="wb")
                     await f.write(await resp.read())
                     await f.close()
-                    # os.system(f"file {filepath}")
-                    
-        
-        image_path = f"cache/thumb{videoid}.png"
-        youtube = Image.open(image_path)
+
+        youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
-        
         image2 = image1.convert("RGBA")
-        background = image2.filter(filter=ImageFilter.BoxBlur(20))
+        
+        # Apply enhanced effects
+        background = enhance_thumbnail(image2)
+        
+        # Add blur effect
+        background = background.filter(filter=ImageFilter.BoxBlur(20))
         enhancer = ImageEnhance.Brightness(background)
         background = enhancer.enhance(0.6)
-
         
+        # Add gradient with random colors
         start_gradient_color = random_color()
         end_gradient_color = random_color()
         gradient_image = generate_gradient(1280, 720, start_gradient_color, end_gradient_color)
         background = Image.blend(background, gradient_image, alpha=0.2)
+        
+        # Add green boundary with glow
+        background = add_green_boundary(background, border_width=5, border_color=(0, 255, 0, 180))
         
         draw = ImageDraw.Draw(background)
         arial = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30)
         font = ImageFont.truetype("AviaxMusic/assets/font.ttf", 30)
         title_font = ImageFont.truetype("AviaxMusic/assets/font3.ttf", 45)
 
-
+        # Create enhanced circular thumbnail
         circle_thumbnail = crop_center_circle(youtube, 400, 20, start_gradient_color)
         circle_thumbnail = circle_thumbnail.resize((400, 400))
         circle_position = (120, 160)
         background.paste(circle_thumbnail, circle_position, circle_thumbnail)
 
+        # Add text with shadow effects
         text_x_position = 565
         title1 = truncate(title)
         draw_text_with_shadow(background, draw, (text_x_position, 180), title1[0], title_font, (255, 255, 255))
         draw_text_with_shadow(background, draw, (text_x_position, 230), title1[1], title_font, (255, 255, 255))
         draw_text_with_shadow(background, draw, (text_x_position, 320), f"{channel}  |  {views[:23]}", arial, (255, 255, 255))
 
-
-        line_length = 580  
-        line_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        # Add enhanced progress line
+        line_length = 580
+        line_color = (0, 255, 0, 180)  # Green color matching boundary
 
         if duration != "Live":
             color_line_percentage = random.uniform(0.15, 0.85)
             color_line_length = int(line_length * color_line_percentage)
             white_line_length = line_length - color_line_length
 
-            start_point_color = (text_x_position, 380)
-            end_point_color = (text_x_position + color_line_length, 380)
-            draw.line([start_point_color, end_point_color], fill=line_color, width=9)
-        
-            start_point_white = (text_x_position + color_line_length, 380)
-            end_point_white = (text_x_position + line_length, 380)
-            draw.line([start_point_white, end_point_white], fill="white", width=8)
-        
-            circle_radius = 10 
-            circle_position = (end_point_color[0], end_point_color[1])
-            draw.ellipse([circle_position[0] - circle_radius, circle_position[1] - circle_radius,
-                      circle_position[0] + circle_radius, circle_position[1] + circle_radius], fill=line_color)
-    
-        else:
-            line_color = (255, 0, 0)
-            start_point_color = (text_x_position, 380)
-            end_point_color = (text_x_position + line_length, 380)
-            draw.line([start_point_color, end_point_color], fill=line_color, width=9)
-        
-            circle_radius = 10 
-            circle_position = (end_point_color[0], end_point_color[1])
-            draw.ellipse([circle_position[0] - circle_radius, circle_position[1] - circle_radius,
-                          circle_position[0] + circle_radius, circle_position[1] + circle_radius], fill=line_color)
+            # Draw progress line with glow effect
+            glow = Image.new('RGBA', background.size, (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow)
+            
+            # Draw colored part
+            glow_draw.line(
+                [(text_x_position, 380), (text_x_position + color_line_length, 380)],
+                fill=line_color,
+                width=4
+            )
+            
+            # Draw white part
+            glow_draw.line(
+                [(text_x_position + color_line_length, 380), (text_x_position + line_length, 380)],
+                fill=(200, 200, 200, 180),
+                width=4
+            )
+            
+            # Apply glow
+            glow = glow.filter(ImageFilter.GaussianBlur(radius=2))
+            background = Image.alpha_composite(background, glow)
 
-        draw_text_with_shadow(background, draw, (text_x_position, 400), "00:00", arial, (255, 255, 255))
-        draw_text_with_shadow(background, draw, (1080, 400), duration, arial, (255, 255, 255))
-        
-        play_icons = Image.open("AviaxMusic/assets/play_icons.png")
-        play_icons = play_icons.resize((580, 62))
-        background.paste(play_icons, (text_x_position, 450), play_icons)
+            # Add duration text with shadow
+            draw_text_with_shadow(background, draw, (text_x_position, 400), duration, arial, (255, 255, 255))
 
-        os.remove(f"cache/thumb{videoid}.png")
-
-        background_path = f"cache/{videoid}_v4.png"
-        background.save(background_path)
-        
-        # After creating the base image, enhance it
-        image = enhance_thumbnail(background)
-        
-        # Add green boundary with glow effect
-        image = add_green_boundary(image)
-        
-        return background_path
+        background = background.convert("RGB")
+        background.save(f"cache/{videoid}_v4.png")
+        return f"cache/{videoid}_v4.png"
 
     except Exception as e:
-        logging.error(f"Error generating thumbnail for video {videoid}: {e}")
-        traceback.print_exc()
+        logging.error(f"Error generating thumbnail: {e}")
         return None
