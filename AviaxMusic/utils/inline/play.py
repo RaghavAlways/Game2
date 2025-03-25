@@ -1,6 +1,7 @@
 import math
+import random
 
-from pyrogram.types import InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from AviaxMusic.utils.formatters import time_to_seconds
 
@@ -60,13 +61,6 @@ def stream_markup_timer(_, chat_id, played, dur):
         bar = "—————————◉"
     buttons = [
         [
-            InlineKeyboardButton(text="▷", callback_data=f"ADMIN Resume|{chat_id}"),
-            InlineKeyboardButton(text="II", callback_data=f"ADMIN Pause|{chat_id}"),
-            InlineKeyboardButton(text="↻", callback_data=f"ADMIN Replay|{chat_id}"),
-            InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
-            InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
-        ],
-        [
             InlineKeyboardButton(
                 text=f"{played} {bar} {dur}",
                 callback_data="GetTimer",
@@ -74,10 +68,20 @@ def stream_markup_timer(_, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
-                url="https://t.me/LB_Movies"
+                text="🎮 Game Mode",
+                callback_data="game_mode",
+            ),
+            InlineKeyboardButton(
+                text="🎬 Get Direct Movie 🎬",
+                callback_data="get_movie",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="✯ ᴄʟᴏsᴇ ✯",
+                callback_data=f"close",
             )
-        ]
+        ],
     ]
     return buttons
 
@@ -85,18 +89,36 @@ def stream_markup_timer(_, chat_id, played, dur):
 def stream_markup(_, chat_id):
     buttons = [
         [
-            InlineKeyboardButton(text="▷", callback_data=f"ADMIN Resume|{chat_id}"),
-            InlineKeyboardButton(text="II", callback_data=f"ADMIN Pause|{chat_id}"),
-            InlineKeyboardButton(text="↻", callback_data=f"ADMIN Replay|{chat_id}"),
-            InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
-            InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
+            InlineKeyboardButton(
+                text="▷",
+                callback_data=f"ADMIN Resume|{chat_id}",
+            ),
+            InlineKeyboardButton(
+                text="II", callback_data=f"ADMIN Pause|{chat_id}"
+            ),
+            InlineKeyboardButton(
+                text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"
+            ),
+            InlineKeyboardButton(
+                text="▢", callback_data=f"ADMIN Stop|{chat_id}"
+            ),
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
-                url="https://t.me/LB_Movies"
+                text="🎮 Game Mode",
+                callback_data="game_mode",
+            ),
+            InlineKeyboardButton(
+                text="🎬 Get Direct Movie 🎬",
+                callback_data="get_movie",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="✯ ᴄʟᴏsᴇ ✯",
+                callback_data=f"close",
             )
-        ]
+        ],
     ]
     return buttons
 
@@ -115,9 +137,13 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
-                url="https://t.me/LB_Movies"
-            )
+                text="🎮 Game Mode",
+                callback_data="game_mode",
+            ),
+            InlineKeyboardButton(
+                text="🎬 Get Direct Movie 🎬",
+                callback_data="get_movie",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -139,9 +165,13 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
-                url="https://t.me/LB_Movies"
-            )
+                text="🎮 Game Mode",
+                callback_data="game_mode",
+            ),
+            InlineKeyboardButton(
+                text="🎬 Get Direct Movie 🎬",
+                callback_data="get_movie",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -168,12 +198,6 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🍿 Get Direct Movie 🍿",
-                url="https://t.me/LB_Movies"
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text="◁",
                 callback_data=f"slider B|{query_type}|{query}|{user_id}|{channel}|{fplay}",
             ),
@@ -184,6 +208,16 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
             InlineKeyboardButton(
                 text="▷",
                 callback_data=f"slider F|{query_type}|{query}|{user_id}|{channel}|{fplay}",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🎮 Game Mode",
+                callback_data="game_mode",
+            ),
+            InlineKeyboardButton(
+                text="🎬 Get Direct Movie 🎬",
+                callback_data="get_movie",
             ),
         ],
     ]
