@@ -207,35 +207,39 @@ async def gen_thumb(videoid: str):
                     await f.write(await resp.read())
                     await f.close()
 
-        # Process main background
+        # Process main background - use full-sized image without circular crop
         youtube = Image.open(f"cache/thumb{videoid}.png")
+        # Use a larger size for the music image
         image1 = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
         background = image1.convert("RGBA")
         
         # Enhance background
         background = enhance_thumbnail(background)
         
-        # Add enhanced green border with glow
-        bordered_bg = Image.new('RGBA', (1280 + 12, 720 + 12), (0, 0, 0, 0))
+        # Add a simple border with glow
+        border_width = 12  # Increased border size
+        bordered_bg = Image.new('RGBA', (1280 + border_width*2, 720 + border_width*2), (0, 0, 0, 0))
+        
+        # Draw green border with glow
         border_draw = ImageDraw.Draw(bordered_bg)
         
         # Draw multiple glowing borders
-        for offset in range(5):
+        for offset in range(6):  # Increased number of layers for more visible border
             border_draw.rectangle(
-                [(offset, offset), (1280 + 12 - offset, 720 + 12 - offset)],
-                outline=(0, 255, 0, 200 - offset * 35),
+                [(offset, offset), (1280 + border_width*2 - offset, 720 + border_width*2 - offset)],
+                outline=(0, 255, 0, 200 - offset * 30),  # Green border with decreasing opacity
                 width=3
             )
         
         # Add white border for extra visibility
         border_draw.rectangle(
-            [(2, 2), (1280 + 10, 720 + 10)],
+            [(2, 2), (1280 + border_width*2 - 2, 720 + border_width*2 - 2)],
             outline=(255, 255, 255, 200),
             width=2
         )
         
-        # Paste background
-        bordered_bg.paste(background, (6, 6))
+        # Paste background in the center
+        bordered_bg.paste(background, (border_width, border_width))
         
         # Add text with enhanced visibility
         draw = ImageDraw.Draw(bordered_bg)
@@ -248,23 +252,17 @@ async def gen_thumb(videoid: str):
         if title1[1]:
             draw_text_with_shadow(bordered_bg, draw, (50, 630), title1[1], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
         
-        # Draw duration with shadow
-        if duration != "Live":
-            draw_text_with_shadow(bordered_bg, draw, (50, 500), duration, font, 'white', shadow_offset=(2, 2), shadow_blur=5)
+        # Add duration and channel info
+        draw_text_with_shadow(bordered_bg, draw, (50, 50), f"Duration: {duration}", font, 'white', shadow_offset=(2, 2), shadow_blur=3)
         
+        # Save the final image
         bordered_bg = bordered_bg.convert("RGB")
-        bordered_bg.save(f"cache/{videoid}_v4.png", optimize=True, quality=95)
-        
-        if os.path.exists(f"cache/thumb{videoid}.png"):
-            os.remove(f"cache/thumb{videoid}.png")
-        
+        bordered_bg.save(f"cache/{videoid}_v4.png")
         return f"cache/{videoid}_v4.png"
     except Exception as e:
         print(f"Error in thumbnail generation: {e}")
         # Use a default thumbnail if generation fails
-        if os.path.exists("AviaxMusic/assets/Audio.jpeg"):
-            return "AviaxMusic/assets/Audio.jpeg"
-        return "AviaxMusic/assets/Audio.jpeg"
+        return "AviaxMusic/assets/thumbnail.png"
 
 # Clean up old thumbnails periodically
 async def cleanup_old_thumbnails():
