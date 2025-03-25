@@ -74,52 +74,38 @@ def add_border(image, border_width, border_color):
     new_image.paste(image, (border_width, border_width))
     return new_image
 
-def crop_center_circle(img, output_size, border, border_color, crop_scale=1.5):
-    half_the_width = img.size[0] / 2
-    half_the_height = img.size[1] / 2
-    larger_size = int(output_size * crop_scale)
-    img = img.crop(
-        (
-            half_the_width - larger_size/2,
-            half_the_height - larger_size/2,
-            half_the_width + larger_size/2,
-            half_the_height + larger_size/2
-        )
-    )
+def crop_center_circle(img, output_size, border_width=4):
+    """Create a circular thumbnail with white border"""
+    # Convert and resize image
+    img = img.convert("RGBA")
     
-    # Resize the image slightly smaller to accommodate white border
-    inner_size = output_size - 2*border - 8  # 8 pixels for white border
-    img = img.resize((inner_size, inner_size))
+    # Calculate sizes
+    total_size = output_size
+    inner_size = output_size - (border_width * 2)
     
-    # Create final image with transparent background
-    final_img = Image.new("RGBA", (output_size, output_size), (0, 0, 0, 0))
+    # Create mask for outer white circle
+    mask_outer = Image.new('L', (total_size, total_size), 0)
+    mask_draw = ImageDraw.Draw(mask_outer)
+    mask_draw.ellipse((0, 0, total_size, total_size), fill=255)
     
-    # Create white border circle
-    white_border = Image.new("RGBA", (output_size - 2*border, output_size - 2*border), (255, 255, 255, 255))
-    white_mask = Image.new("L", (output_size - 2*border, output_size - 2*border), 0)
-    white_draw = ImageDraw.Draw(white_mask)
-    white_draw.ellipse((0, 0, output_size - 2*border, output_size - 2*border), fill=255)
+    # Create mask for inner circle
+    mask_inner = Image.new('L', (inner_size, inner_size), 0)
+    mask_draw_inner = ImageDraw.Draw(mask_inner)
+    mask_draw_inner.ellipse((0, 0, inner_size, inner_size), fill=255)
     
-    # Create inner circle mask for main image
-    mask_main = Image.new("L", (inner_size, inner_size), 0)
-    draw_main = ImageDraw.Draw(mask_main)
-    draw_main.ellipse((0, 0, inner_size, inner_size), fill=255)
+    # Create output image with white background
+    output = Image.new('RGBA', (total_size, total_size), (255, 255, 255, 255))
     
-    # Create outer border mask
-    mask_border = Image.new("L", (output_size, output_size), 0)
-    draw_border = ImageDraw.Draw(mask_border)
-    draw_border.ellipse((0, 0, output_size, output_size), fill=255)
+    # Resize and crop input image
+    img_resized = img.resize((inner_size, inner_size), Image.Resampling.LANCZOS)
     
-    # Paste white border
-    final_img.paste(white_border, (border, border), white_mask)
+    # Paste the resized image with inner mask
+    output.paste(img_resized, (border_width, border_width), mask_inner)
     
-    # Paste main image with slight offset for white border
-    final_img.paste(img, (border + 4, border + 4), mask_main)
+    # Apply outer mask to get final circular shape
+    output.putalpha(mask_outer)
     
-    # Apply final circular mask
-    result = Image.composite(final_img, Image.new("RGBA", final_img.size, (0, 0, 0, 0)), mask_border)
-    
-    return result
+    return output
 
 def draw_text_with_shadow(background, draw, position, text, font, fill, shadow_offset=(3, 3), shadow_blur=5):
     
@@ -177,14 +163,9 @@ def enhance_thumbnail(image):
 
 async def gen_thumb(videoid: str):
     try:
-        cache_path = f"cache/{videoid}_v4.png"
-        if os.path.isfile(cache_path):
-            return cache_path
-
-        # Check memory cache
-        if videoid in processed_cache:
-            return processed_cache[videoid]
-
+        if os.path.isfile(f"cache/{videoid}_v4.png"):
+            return f"cache/{videoid}_v4.png"
+        
         url = f"https://www.youtube.com/watch?v={videoid}"
         results = VideosSearch(url, limit=1)
         result = (await results.next())["result"][0]
@@ -205,106 +186,58 @@ async def gen_thumb(videoid: str):
                     await f.write(await resp.read())
                     await f.close()
 
-        # Process image
+        # Process main background
         youtube = Image.open(f"cache/thumb{videoid}.png")
-        image1 = youtube.resize(changeImageSize(1280, 720, youtube.size))
+        image1 = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
         background = image1.convert("RGBA")
         
-        # Create circular thumbnail with white border
-        circle_thumbnail = crop_center_circle(youtube, 400, 20, (0, 255, 0, 180))
-        circle_thumbnail = circle_thumbnail.resize((400, 400))
-        circle_position = (120, 160)
-        
-        # Apply optimized effects
+        # Enhance background
         background = enhance_thumbnail(background)
-        background = background.filter(ImageFilter.BoxBlur(10))
-        background = ImageEnhance.Brightness(background).enhance(0.6)
+        background = background.filter(ImageFilter.GaussianBlur(10))
+        enhancer = ImageEnhance.Brightness(background)
+        background = enhancer.enhance(0.6)
         
-        # Generate and blend gradient
-        gradient_colors = (random_color(), random_color())
-        gradient = generate_gradient(1280, 720, *gradient_colors)
-        background = Image.blend(background, gradient, 0.2)
+        # Create circular thumbnail with white border
+        circle_thumbnail = crop_center_circle(youtube, 400, border_width=6)
+        circle_pos = (120, 160)
         
-        # Add green boundary with glow
-        border_color = (0, 255, 0, 180)
-        border_width = 5
+        # Add green border with glow
+        bordered_bg = Image.new('RGBA', (1280 + 10, 720 + 10), (0, 0, 0, 0))
+        border_draw = ImageDraw.Draw(bordered_bg)
         
-        # Create a new image with border
-        bordered_bg = Image.new("RGBA", (1280 + 2*border_width, 720 + 2*border_width), (0, 0, 0, 0))
+        # Draw glowing border
+        for offset in range(3):
+            border_draw.rectangle(
+                [(offset, offset), (1280 + 10 - offset, 720 + 10 - offset)],
+                outline=(0, 255, 0, 100 - offset * 30),
+                width=3
+            )
         
-        # Create glow effect
-        glow = Image.new("RGBA", bordered_bg.size, (0, 0, 0, 0))
-        glow_draw = ImageDraw.Draw(glow)
-        glow_draw.rectangle(
-            [(0, 0), (bordered_bg.width, bordered_bg.height)],
-            outline=border_color,
-            width=border_width
-        )
+        # Paste background
+        bordered_bg.paste(background, (5, 5))
         
-        # Apply blur to create glow
-        glow = glow.filter(ImageFilter.GaussianBlur(radius=3))
+        # Paste circular thumbnail
+        bordered_bg.paste(circle_thumbnail, circle_pos, circle_thumbnail)
         
-        # Paste the background
-        bordered_bg.paste(background, (border_width, border_width))
-        
-        # Composite with glow
-        background = Image.alpha_composite(bordered_bg, glow)
-        
-        # Paste circular thumbnail with white border
-        background.paste(circle_thumbnail, circle_position, circle_thumbnail)
-        
-        # Draw text and elements
-        draw = ImageDraw.Draw(background)
-        fonts = {
-            'title': ImageFont.truetype("AviaxMusic/assets/font3.ttf", 45),
-            'arial': ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30),
-            'normal': ImageFont.truetype("AviaxMusic/assets/font.ttf", 30)
-        }
-
         # Add text
-        title_parts = truncate(title)
-        text_positions = [
-            (565, 180, title_parts[0], fonts['title'], COLORS['white']),
-            (565, 230, title_parts[1], fonts['title'], COLORS['white']),
-            (565, 320, f"{channel}  |  {views[:23]}", fonts['arial'], COLORS['white'])
-        ]
-
-        for x, y, text, font, color in text_positions:
-            draw.text((x+2, y+2), text, font=font, fill=COLORS['black'])  # Shadow
-            draw.text((x, y), text, font=font, fill=color)
-
-        # Add progress line
+        draw = ImageDraw.Draw(bordered_bg)
+        font = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 40)
+        font2 = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 70)
+        
+        # Draw title
+        title1 = truncate(title)
+        draw.text((480, 180), title1[0], fill='white', font=font2)
+        if title1[1]:
+            draw.text((480, 280), title1[1], fill='white', font=font2)
+            
+        # Draw duration
         if duration != "Live":
-            line_start = 565
-            line_length = 580
-            progress = random.uniform(0.15, 0.85)
-            
-            # Draw progress line
-            draw.line(
-                [(line_start, 380), (line_start + line_length * progress, 380)],
-                fill=COLORS['green'],
-                width=4
-            )
-            draw.line(
-                [(line_start + line_length * progress, 380), (line_start + line_length, 380)],
-                fill=(200, 200, 200, 180),
-                width=4
-            )
-            
-            # Add duration
-            draw.text((line_start, 400), duration, font=fonts['arial'], fill=COLORS['white'])
-
-        # Save and cache
-        background = background.convert("RGB")
-        background.save(cache_path, optimize=True, quality=95)
+            draw.text((480, 380), duration, fill='white', font=font)
         
-        # Update memory cache
-        processed_cache[videoid] = cache_path
-        if len(processed_cache) > CACHE_SIZE:
-            processed_cache.pop(next(iter(processed_cache)))
+        bordered_bg = bordered_bg.convert("RGB")
+        bordered_bg.save(f"cache/{videoid}_v4.png", optimize=True, quality=95)
         
-        return cache_path
-
+        return f"cache/{videoid}_v4.png"
     except Exception as e:
         logging.error(f"Error generating thumbnail: {e}")
         return None
