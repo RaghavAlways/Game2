@@ -1,8 +1,10 @@
 import random
 import asyncio
+import re
 from typing import Dict, List, Set
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import UserNotParticipant, FloodWait
 from AviaxMusic import app
 from AviaxMusic.misc import SUDOERS
 
@@ -23,7 +25,20 @@ WORD_LIST = [
 # Dictionary to store active games: {chat_id: {word: str, attempts: List[str], players: Dict[int, int], current_player: int}}
 active_games = {}
 
-def create_game_message(chat_id: int) -> str:
+async def get_user_name(chat_id: int, user_id: int) -> str:
+    """Safely get user name with error handling"""
+    try:
+        user = await app.get_chat_member(chat_id, user_id)
+        return user.user.first_name
+    except (UserNotParticipant, FloodWait) as e:
+        if isinstance(e, FloodWait):
+            await asyncio.sleep(e.x)
+            return await get_user_name(chat_id, user_id)
+        return "Unknown User"
+    except Exception:
+        return "Unknown User"
+
+async def create_game_message(chat_id: int) -> str:
     """Create the game status message"""
     game = active_games[chat_id]
     word = game["word"]
@@ -32,8 +47,7 @@ def create_game_message(chat_id: int) -> str:
     # Format players
     players_list = []
     for user_id, score in sorted(game["players"].items(), key=lambda x: x[1], reverse=True):
-        user = app.get_chat_member(chat_id, user_id)
-        name = user.user.first_name
+        name = await get_user_name(chat_id, user_id)
         # Add crown emoji for current player
         if user_id == game.get("current_player"):
             players_list.append(f"👑 {name}: {score}")
@@ -62,8 +76,17 @@ def create_game_message(chat_id: int) -> str:
     # Get current player name
     current_player_text = ""
     if game.get("current_player"):
-        current_player = app.get_chat_member(chat_id, game["current_player"]).user
-        current_player_text = f"\n🎮 Current Player: {current_player.first_name}"
+        current_player_name = await get_user_name(chat_id, game["current_player"])
+        current_player_text = f"\n🎮 Current Player: {current_player_name}"
+    
+    # Used letters tracking
+    used_letters = set()
+    for attempt in attempts:
+        for letter in attempt:
+            used_letters.add(letter)
+            
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    remaining_letters = "".join([letter for letter in alphabet if letter not in used_letters])
     
     return f"""
 🎮 **Wordle Game**
@@ -74,6 +97,9 @@ Remaining: {remaining} guesses{current_player_text}
 
 **Previous Attempts:**
 {attempts_text if attempts else "No attempts yet"}
+
+**Available Letters:**
+`{' '.join(remaining_letters)}`
 
 **Players:**
 {players_text}
@@ -135,7 +161,7 @@ Word length: **5 letters**
 4. The first person to guess the word correctly wins.
 
 To make a guess, send: `/guess WORD`
-{create_game_message(chat_id)}
+{await create_game_message(chat_id)}
 """,
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
@@ -168,8 +194,8 @@ async def make_guess(_, message: Message):
     
     # Check if it's the user's turn
     if user_id != active_games[chat_id]["current_player"]:
-        current_player = app.get_chat_member(chat_id, active_games[chat_id]["current_player"]).user
-        await message.reply_text(f"❌ It's not your turn. Wait for {current_player.first_name} to make a guess.")
+        current_player_name = await get_user_name(chat_id, active_games[chat_id]["current_player"])
+        await message.reply_text(f"❌ It's not your turn. Wait for {current_player_name} to make a guess.")
         return
     
     # Get the guess
@@ -178,6 +204,11 @@ async def make_guess(_, message: Message):
         return
     
     guess = message.command[1].upper()
+    
+    # Validate guess is only letters
+    if not re.match(r'^[A-Za-z]+$', guess):
+        await message.reply_text("❗ Your guess must contain only letters.")
+        return
     
     # Validate guess length
     word = active_games[chat_id]["word"]
@@ -203,10 +234,16 @@ async def make_guess(_, message: Message):
             reverse=True
         )
         
-        players_text = "\n".join([
-            f"{'🥇' if i==0 else '🥈' if i==1 else '🥉' if i==2 else '•'} {app.get_chat_member(chat_id, pid).user.first_name}: {score}" 
-            for i, (pid, score) in enumerate(sorted_players)
-        ])
+        players_text = []
+        for i, (pid, score) in enumerate(sorted_players):
+            try:
+                player_name = await get_user_name(chat_id, pid)
+                medal = '🥇' if i==0 else '🥈' if i==1 else '🥉' if i==2 else '•'
+                players_text.append(f"{medal} {player_name}: {score}")
+            except Exception:
+                continue
+        
+        players_text_str = "\n".join(players_text)
         
         # Create winner message
         winner_message = f"""
@@ -216,30 +253,51 @@ async def make_guess(_, message: Message):
 ✅ Solved in {attempts_count} attempts
 
 **Final Leaderboard:**
-{players_text}
+{players_text_str}
 
 **Play Again?** Use `/wordle` to start a new game!
 """
         
         # Send the winner message and clean up
-        await message.reply_text(winner_message)
-        del active_games[chat_id]
+        await message.reply_text(
+            winner_message,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+            ])
+        )
+        
+        # Delete the game
+        try:
+            del active_games[chat_id]
+        except KeyError:
+            pass
+        
         return
     
     # Update game message with the new attempt
-    # Calculate next player (round-robin)
-    players = list(active_games[chat_id]["players"].keys())
-    current_idx = players.index(user_id)
-    next_idx = (current_idx + 1) % len(players)
-    active_games[chat_id]["current_player"] = players[next_idx]
+    try:
+        # Calculate next player (round-robin)
+        players = list(active_games[chat_id]["players"].keys())
+        current_idx = players.index(user_id)
+        next_idx = (current_idx + 1) % len(players)
+        active_games[chat_id]["current_player"] = players[next_idx]
+    except (ValueError, IndexError):
+        # Fallback if there's an issue with player management
+        if players:
+            active_games[chat_id]["current_player"] = players[0]
     
     # Check if max attempts reached
     if len(active_games[chat_id]["attempts"]) >= 30:
         # Game over - no one guessed correctly
-        players_text = "\n".join([
-            f"• {app.get_chat_member(chat_id, pid).user.first_name}: {score}" 
-            for pid, score in active_games[chat_id]["players"].items()
-        ])
+        players_text = []
+        for pid, score in active_games[chat_id]["players"].items():
+            try:
+                player_name = await get_user_name(chat_id, pid)
+                players_text.append(f"• {player_name}: {score}")
+            except Exception:
+                continue
+                
+        players_text_str = "\n".join(players_text)
         
         game_over_message = f"""
 🎮 **Wordle Game Over!**
@@ -248,21 +306,33 @@ async def make_guess(_, message: Message):
 Max attempts (30) reached.
 
 **Players:**
-{players_text}
+{players_text_str}
 
 **Play Again?** Use `/wordle` to start a new game!
 """
         
-        await message.reply_text(game_over_message)
-        del active_games[chat_id]
+        await message.reply_text(
+            game_over_message,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+            ])
+        )
+        
+        # Delete the game
+        try:
+            del active_games[chat_id]
+        except KeyError:
+            pass
+            
         return
     
     # Show updated game status
+    result = check_word(guess, word)
     game_message = f"""
 🔤 {message.from_user.first_name} guessed: **{guess}**
-{check_word(guess, word)}
+{result}
 
-{create_game_message(chat_id)}
+{await create_game_message(chat_id)}
 """
     
     await message.reply_text(
@@ -285,14 +355,18 @@ async def wordle_callback(_, query: CallbackQuery):
             await query.answer("The game has ended or doesn't exist anymore.", show_alert=True)
             return
         
-        await query.message.reply_text(
-            f"**Current Wordle Game:**\n\n{create_game_message(chat_id)}",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-            ])
-        )
-        await query.answer()
+        try:
+            await query.message.reply_text(
+                f"**Current Wordle Game:**\n\n{await create_game_message(chat_id)}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                ])
+            )
+            await query.answer()
+        except Exception as e:
+            print(f"Error showing game: {e}")
+            await query.answer("Error showing game. Try again.", show_alert=True)
     
     # Join game
     elif data == "join":
@@ -308,14 +382,18 @@ async def wordle_callback(_, query: CallbackQuery):
             if not active_games[chat_id].get("current_player"):
                 active_games[chat_id]["current_player"] = user_id
             
-            await query.message.reply_text(
-                f"**{query.from_user.first_name}** has joined the Wordle game!\n\n{create_game_message(chat_id)}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
-                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
-                ])
-            )
-            await query.answer(f"You joined the game! When it's your turn, use /guess WORD to play.")
+            try:
+                await query.message.reply_text(
+                    f"**{query.from_user.first_name}** has joined the Wordle game!\n\n{await create_game_message(chat_id)}",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+                        [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                    ])
+                )
+                await query.answer(f"You joined the game! When it's your turn, use /guess WORD to play.")
+            except Exception as e:
+                print(f"Error joining game: {e}")
+                await query.answer("Error joining game. Try again.", show_alert=True)
         else:
             await query.answer("You're already in the game!", show_alert=True)
     
@@ -340,9 +418,37 @@ The word was: **{word}**
 Game ended by: {query.from_user.first_name}
 """
         
-        await query.message.reply_text(end_message)
-        del active_games[chat_id]
-        await query.answer("Game ended!")
+        try:
+            await query.message.reply_text(
+                end_message,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+                ])
+            )
+            
+            # Delete the game
+            try:
+                del active_games[chat_id]
+            except KeyError:
+                pass
+                
+            await query.answer("Game ended!")
+        except Exception as e:
+            print(f"Error ending game: {e}")
+            await query.answer("Error ending game. Try again.", show_alert=True)
+    
+    # Handle wordle_start callback
+    elif data == "start":
+        try:
+            # Simulate /wordle command
+            message = query.message
+            message.command = ["wordle"]
+            message.from_user = query.from_user
+            await start_wordle(_, message)
+            await query.answer()
+        except Exception as e:
+            print(f"Error starting game: {e}")
+            await query.answer("Error starting game. Try again.", show_alert=True)
     
     else:
         await query.answer()
