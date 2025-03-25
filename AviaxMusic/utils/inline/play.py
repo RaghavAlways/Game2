@@ -78,20 +78,12 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", callback_data=f"ADMIN Shuffle|{chat_id}"
+                text="⇆ Shuffle", 
+                callback_data=f"ADMIN Shuffle|{chat_id}"
             ),
             InlineKeyboardButton(
-                text="↻ Loop", callback_data=f"ADMIN Loop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="⏮ 10 Sec",
-                callback_data=f"ADMIN 1|{chat_id}",
-            ),
-            InlineKeyboardButton(
-                text="⏭ 10 Sec",
-                callback_data=f"ADMIN 2|{chat_id}",
+                text="↻ Loop", 
+                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [
@@ -102,11 +94,8 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="≼ Back",
-                callback_data=f"MainMarkup {videoid}|{chat_id}",
-            ),
-            InlineKeyboardButton(
-                text="🗑 Close", callback_data=f"close"
+                text="🗑 Close", 
+                callback_data=f"close"
             ),
         ],
     ]
@@ -140,10 +129,12 @@ def telegram_markup_timer(_, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", callback_data=f"ADMIN Shuffle|{chat_id}"
+                text="⇆ Shuffle", 
+                callback_data=f"ADMIN Shuffle|{chat_id}"
             ),
             InlineKeyboardButton(
-                text="↻ Loop", callback_data=f"ADMIN Loop|{chat_id}"
+                text="↻ Loop", 
+                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [
@@ -154,7 +145,8 @@ def telegram_markup_timer(_, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="🗑 Close", callback_data=f"close"
+                text="🗑 Close", 
+                callback_data=f"close"
             ),
         ],
     ]
