@@ -1,9 +1,12 @@
 import uvloop
+from typing import Union
 
 uvloop.install()
 
 from pyrogram import Client, errors
 from pyrogram.enums import ChatMemberStatus, ParseMode
+from pyrogram.types import Message, User
+from pyrogram.errors import ChatAdminRequired, ChatWriteForbidden
 
 import config
 from ..logging import LOGGER
@@ -32,17 +35,14 @@ class Aviax(Client):
         try:
             await self.send_message(
                 chat_id=config.LOG_GROUP_ID,
-                text=f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b><u>\n\nɪᴅ : <code>{self.id}</code>\nɴᴀᴍᴇ : {self.name}\nᴜsᴇʀɴᴀᴍᴇ : @{self.username}",
+                text=f"<b>🤖 Bot Started!</b>\n\n├ Name: {self.name}\n├ ID: {self.id}\n└ Username: @{self.username}",
             )
-        except (errors.ChannelInvalid, errors.PeerIdInvalid):
-            LOGGER(__name__).error(
-                "Bot has failed to access the log group/channel. Make sure that you have added your bot to your log group/channel."
-            )
+            LOGGER(__name__).info(f"Bot Started as {self.name}")
+        except (ChatAdminRequired, ChatWriteForbidden):
+            LOGGER(__name__).error(f"Bot doesn't have access to LOG_GROUP_ID!")
             exit()
-        except Exception as ex:
-            LOGGER(__name__).error(
-                f"Bot has failed to access the log group/channel.\n  Reason : {type(ex).__name__}."
-            )
+        except Exception as e:
+            LOGGER(__name__).error(f"Error in LOG_GROUP_ID: {e}")
             exit()
 
         a = await self.get_chat_member(config.LOG_GROUP_ID, self.id)
@@ -55,3 +55,18 @@ class Aviax(Client):
 
     async def stop(self):
         await super().stop()
+
+    async def iter_messages(
+        self,
+        chat_id: Union[int, str],
+        limit: int,
+        offset: int = 0,
+    ):
+        return [
+            m
+            async for m in self.get_chat_history(
+                chat_id, limit=limit, offset=offset
+            )
+        ]
+
+app = Aviax()
