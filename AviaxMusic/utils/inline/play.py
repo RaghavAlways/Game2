@@ -88,14 +88,12 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
+                text="🍿 Get Direct Movie 🍿",
+                url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
                 text="Play Game",
                 callback_data="wordle_button",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🗑 Close", 
-                callback_data=f"close"
             ),
         ],
     ]
@@ -139,14 +137,12 @@ def telegram_markup_timer(_, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
+                text="🍿 Get Direct Movie 🍿",
+                url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
                 text="Play Game",
                 callback_data="wordle_button",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🗑 Close", 
-                callback_data=f"close"
             ),
         ],
     ]
@@ -193,14 +189,12 @@ def stream_markup(_, videoid=None, chat_id=None):
         ],
         [
             InlineKeyboardButton(
+                text="🍿 Get Direct Movie 🍿",
+                url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
                 text="Play Game",
                 callback_data="wordle_button",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🗑 Close", 
-                callback_data=f"close"
             ),
         ],
     ]
@@ -237,14 +231,12 @@ def telegram_markup(_, chat_id):
         ],
         [
             InlineKeyboardButton(
+                text="🍿 Get Direct Movie 🍿",
+                url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
                 text="Play Game",
                 callback_data="wordle_button",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="🗑 Close", 
-                callback_data=f"close"
             ),
         ],
     ]
@@ -340,12 +332,12 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="Play Game",
-                callback_data="wordle_button",
-            ),
-            InlineKeyboardButton(
                 text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
+                text="Play Game",
+                callback_data="wordle_button",
             ),
         ],
     ]
