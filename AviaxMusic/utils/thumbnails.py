@@ -214,13 +214,6 @@ async def gen_thumb(videoid: str):
         
         # Enhance background
         background = enhance_thumbnail(background)
-        background = background.filter(ImageFilter.GaussianBlur(10))
-        enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.6)
-        
-        # Create circular thumbnail with enhanced white border
-        circle_thumbnail = crop_center_circle(youtube, 400, border_width=10)
-        circle_pos = (120, 160)
         
         # Add enhanced green border with glow
         bordered_bg = Image.new('RGBA', (1280 + 12, 720 + 12), (0, 0, 0, 0))
@@ -244,37 +237,34 @@ async def gen_thumb(videoid: str):
         # Paste background
         bordered_bg.paste(background, (6, 6))
         
-        # Add glow effect to circular thumbnail
-        glow_layer = Image.new('RGBA', bordered_bg.size, (0, 0, 0, 0))
-        glow_layer.paste(circle_thumbnail, circle_pos, circle_thumbnail)
-        glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(3))
-        bordered_bg = Image.alpha_composite(bordered_bg, glow_layer)
-        
-        # Paste circular thumbnail
-        bordered_bg.paste(circle_thumbnail, circle_pos, circle_thumbnail)
-        
         # Add text with enhanced visibility
         draw = ImageDraw.Draw(bordered_bg)
         font = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 40)
         font2 = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 70)
         
-        # Draw title with shadow
+        # Draw title with shadow at the bottom of the image
         title1 = truncate(title)
-        draw_text_with_shadow(bordered_bg, draw, (480, 180), title1[0], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
+        draw_text_with_shadow(bordered_bg, draw, (50, 550), title1[0], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
         if title1[1]:
-            draw_text_with_shadow(bordered_bg, draw, (480, 280), title1[1], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
+            draw_text_with_shadow(bordered_bg, draw, (50, 630), title1[1], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
         
         # Draw duration with shadow
         if duration != "Live":
-            draw_text_with_shadow(bordered_bg, draw, (480, 380), duration, font, 'white', shadow_offset=(2, 2), shadow_blur=5)
+            draw_text_with_shadow(bordered_bg, draw, (50, 500), duration, font, 'white', shadow_offset=(2, 2), shadow_blur=5)
         
         bordered_bg = bordered_bg.convert("RGB")
         bordered_bg.save(f"cache/{videoid}_v4.png", optimize=True, quality=95)
         
+        if os.path.exists(f"cache/thumb{videoid}.png"):
+            os.remove(f"cache/thumb{videoid}.png")
+        
         return f"cache/{videoid}_v4.png"
     except Exception as e:
-        logging.error(f"Error generating thumbnail: {e}")
-        return None
+        print(f"Error in thumbnail generation: {e}")
+        # Use a default thumbnail if generation fails
+        if os.path.exists("AviaxMusic/assets/Audio.jpeg"):
+            return "AviaxMusic/assets/Audio.jpeg"
+        return "AviaxMusic/assets/Audio.jpeg"
 
 # Clean up old thumbnails periodically
 async def cleanup_old_thumbnails():
