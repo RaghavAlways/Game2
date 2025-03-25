@@ -23,7 +23,8 @@ async def on_new_chat_members(_, message: Message):
                             f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
                             f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
                             f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
-                            f"🧑‍💼 <b>Added By:</b> {message.from_user.mention if message.from_user else 'Unknown'}"
+                            f"🧑‍💼 <b>Added By:</b> {message.from_user.mention if message.from_user else 'Unknown'}\n"
+                            f"👤 <b>User ID:</b> <code>{message.from_user.id if message.from_user else 'Unknown'}</code>"
                         )
                         await app.send_message(
                             chat_id=config.LOG_GROUP_ID,
@@ -36,7 +37,7 @@ async def on_new_chat_members(_, message: Message):
                     # Send welcome message in the group
                     welcome_message = (
                         "👋 Thanks for adding me!\n\n"
-                        "🎵 I'm a powerful music bot with many features.\n"
+                        " I'm a powerful music bot with many features.\n"
                         "🔰 To see my commands, type /help\n\n"
                         "⚡️ Make me admin to use my full potential!"
                     )
@@ -58,13 +59,27 @@ async def on_left_chat_member(_, message: Message):
         if message.left_chat_member and message.left_chat_member.id == app.id:
             LOGGER(__name__).info(f"Bot removed from {message.chat.title} ({message.chat.id})")
             try:
+                # Get user info who removed the bot
+                user = message.from_user
+                user_info = ""
+                if user:
+                    user_info = (
+                        f"👤 <b>Removed By:</b> {user.mention}\n"
+                        f"🆔 <b>User ID:</b> <code>{user.id}</code>\n"
+                        f"📝 <b>Username:</b> @{user.username or 'None'}\n"
+                        f"📱 <b>First Name:</b> {user.first_name}\n"
+                        f"📱 <b>Last Name:</b> {user.last_name or 'None'}"
+                    )
+                else:
+                    user_info = "👤 <b>Removed By:</b> Unknown User"
+
                 log_message = (
                     "❌ <b>Bot Removed from Group</b>\n\n"
                     f"📮 <b>Group:</b> {message.chat.title}\n"
                     f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
                     f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
                     f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
-                    f"🧑‍💼 <b>Removed By:</b> {message.from_user.mention if message.from_user else 'Unknown'}"
+                    f"{user_info}"
                 )
                 await app.send_message(
                     chat_id=config.LOG_GROUP_ID,
