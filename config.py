@@ -115,3 +115,5 @@ if SUPPORT_GROUP:
         raise SystemExit(
             "[ERROR] - Your SUPPORT_GROUP url is wrong. Please ensure that it starts with https://"
         )
+
+LOGGER_ID = -1001234567890  # Replace with your logger group ID
