@@ -33,8 +33,6 @@ Join our movie Group to get:
 • Latest Movies
 • Web Series
 • And much more!
-
-📺 Join Now: @LB_Movies
 """,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🍿 Join Movie Channel 🍿", url="https://t.me/LB_Movies")],
