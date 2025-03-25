@@ -2,8 +2,8 @@ from pyrogram import filters
 from pyrogram.types import Message
 from pyrogram.errors import ChatWriteForbidden
 
+import config
 from AviaxMusic import app
-from AviaxMusic.utils.logger import group_logger
 from AviaxMusic.logging import LOGGER
 
 @app.on_message(filters.new_chat_members, group=5)
@@ -15,9 +15,21 @@ async def on_new_chat_members(_, message: Message):
             for member in message.new_chat_members:
                 if member.id == app.id:
                     LOGGER(__name__).info(f"Bot added to {message.chat.title} ({message.chat.id})")
-                    # Log the event
+                    # Log the event to LOG_GROUP_ID
                     try:
-                        await group_logger(message)
+                        log_message = (
+                            "✨ <b>Bot Added to New Group</b>\n\n"
+                            f"📮 <b>Group:</b> {message.chat.title}\n"
+                            f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
+                            f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
+                            f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
+                            f"🧑‍💼 <b>Added By:</b> {message.from_user.mention if message.from_user else 'Unknown'}"
+                        )
+                        await app.send_message(
+                            chat_id=config.LOG_GROUP_ID,
+                            text=log_message,
+                            disable_web_page_preview=True
+                        )
                     except Exception as e:
                         LOGGER(__name__).error(f"Failed to send log message: {str(e)}")
                     
@@ -51,6 +63,8 @@ async def on_left_chat_member(_, message: Message):
                     f"📮 <b>Group:</b> {message.chat.title}\n"
                     f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
                     f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
+                    f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
+                    f"🧑‍💼 <b>Removed By:</b> {message.from_user.mention if message.from_user else 'Unknown'}"
                 )
                 await app.send_message(
                     chat_id=config.LOG_GROUP_ID,
