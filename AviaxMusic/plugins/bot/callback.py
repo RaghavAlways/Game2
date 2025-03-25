@@ -87,22 +87,29 @@ async def stream_menu_cb(client, CallbackQuery, _):
 @app.on_callback_query(filters.regex("wordle_button") & ~BANNED_USERS)
 async def wordle_button_callback(client, CallbackQuery):
     try:
-        await CallbackQuery.answer()
+        await CallbackQuery.answer("Starting a new Wordle game...")
         message = CallbackQuery.message
         
-        # Create a proper command attribute 
+        # Simulate a proper message object for start_wordle
         message.command = ["wordle"]
-        
-        # Create a proper from_user attribute if missing
         message.from_user = CallbackQuery.from_user
+        message.chat = CallbackQuery.message.chat
         
-        # Debug logs
-        print(f"Starting wordle game from button. User: {message.from_user.id}")
+        print(f"Starting wordle game from button. User: {message.from_user.id}, Chat: {message.chat.id}")
         
-        # Import and call start_wordle directly
+        # Create a new reply message to the current message
+        new_message = await message.reply_text("Starting Wordle game...")
+        
+        # Modify the message to simulate a proper command message
+        new_message.command = ["wordle"]
+        new_message.from_user = CallbackQuery.from_user
+        
+        # Import the wordle module and call start_wordle function with the new message
         from AviaxMusic.plugins.bot.wordle import start_wordle
-        await start_wordle(client, message)
+        await start_wordle(client, new_message)
+        
+        # Delete the starting message to keep the chat clean
+        await new_message.delete()
     except Exception as e:
         print(f"Error in wordle button callback: {str(e)}")
-        # Show detailed error to user
-        await CallbackQuery.answer(f"Error starting game: {str(e)}. Try /wordle command instead.", show_alert=True) 
+        await CallbackQuery.answer(f"Error starting game: {str(e)[:50]}... Try /wordle command instead.", show_alert=True) 

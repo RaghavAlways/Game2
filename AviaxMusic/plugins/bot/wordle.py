@@ -485,10 +485,191 @@ Have fun playing! 🎯
         ])
     )
 
-@app.on_callback_query(filters.regex("^wordle_start$"))
+@app.on_callback_query(filters.regex("wordle_start"))
 async def start_wordle_callback(_, query: CallbackQuery):
-    message = query.message
-    message.command = ["wordle"]
-    message.from_user = query.from_user
-    await start_wordle(_, message)
-    await query.answer() 
+    """Handler for starting a new game via callback button"""
+    try:
+        # Answer the callback to acknowledge the button press
+        await query.answer("Starting a new Wordle game...")
+        
+        # Create a proper message object for start_wordle
+        message = query.message
+        message.command = ["wordle"]
+        message.from_user = query.from_user
+        
+        # Log the game start attempt
+        print(f"Starting wordle game from callback button. User: {message.from_user.id}, Chat: {message.chat.id}")
+        
+        # Call the start_wordle function
+        await start_wordle(_, message)
+    except Exception as e:
+        print(f"Error in wordle_start callback: {str(e)}")
+        await query.answer(f"Error starting new game: {str(e)[:50]}... Try /wordle command instead.", show_alert=True)
+
+@app.on_callback_query(filters.regex("wordle_join"))
+async def join_wordle_callback(_, query: CallbackQuery):
+    """Handler for joining a Wordle game"""
+    try:
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+        
+        # Check if there's a game in progress
+        if chat_id not in active_games:
+            await query.answer("No game in progress. Start a new game with /wordle", show_alert=True)
+            return
+        
+        # Check if user is already a player
+        if user_id in active_games[chat_id]["players"]:
+            await query.answer("You are already in the game!", show_alert=True)
+            return
+        
+        # Add user to players
+        active_games[chat_id]["players"][user_id] = 0
+        
+        # Get player name
+        player_name = query.from_user.first_name
+        
+        # Answer the callback
+        await query.answer(f"Welcome to the game, {player_name}!", show_alert=True)
+        
+        # Update game message
+        try:
+            message_id = active_games[chat_id].get("message_id")
+            if message_id:
+                updated_message = await create_game_message(chat_id)
+                await query.message.edit_text(
+                    f"""
+🎮 **Wordle Game in Progress**
+Word length: **5 letters**
+
+**How to Play:**
+1. You have to guess a random 5-letter word.
+2. After each guess, you'll get hints:
+   - 🟩 - Correct letter in the right spot.
+   - 🟨 - Correct letter in the wrong spot.
+   - 🟥 - Letter not in the word.
+3. The game will run until the word is found or a maximum of 30 guesses are reached.
+
+To make a guess, send: `/guess WORD`
+{updated_message}
+""",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+                        [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                    ])
+                )
+        except Exception as e:
+            print(f"Error updating game message: {e}")
+            
+    except Exception as e:
+        print(f"Error in join_wordle callback: {e}")
+        await query.answer("Error joining game. Try again.", show_alert=True)
+
+@app.on_callback_query(filters.regex("wordle_show"))
+async def show_wordle_callback(_, query: CallbackQuery):
+    """Handler for showing the current Wordle game status"""
+    try:
+        chat_id = query.message.chat.id
+        
+        # Check if there's a game in progress
+        if chat_id not in active_games:
+            await query.answer("No game in progress. Start a new game with /wordle", show_alert=True)
+            return
+        
+        # Update game message
+        updated_message = await create_game_message(chat_id)
+        await query.message.edit_text(
+            f"""
+🎮 **Wordle Game in Progress**
+Word length: **5 letters**
+
+**How to Play:**
+1. You have to guess a random 5-letter word.
+2. After each guess, you'll get hints:
+   - 🟩 - Correct letter in the right spot.
+   - 🟨 - Correct letter in the wrong spot.
+   - 🟥 - Letter not in the word.
+3. The game will run until the word is found or a maximum of 30 guesses are reached.
+
+To make a guess, send: `/guess WORD`
+{updated_message}
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+                [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+            ])
+        )
+        
+        await query.answer("Game status updated!")
+    except Exception as e:
+        print(f"Error in show_wordle callback: {e}")
+        await query.answer("Error showing game. Try again.", show_alert=True)
+
+@app.on_callback_query(filters.regex("wordle_end"))
+async def end_wordle_callback(_, query: CallbackQuery):
+    """Handler for ending a Wordle game"""
+    try:
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+        
+        # Check if there's a game in progress
+        if chat_id not in active_games:
+            await query.answer("No game in progress to end.", show_alert=True)
+            return
+        
+        # Only allow game creator or admins to end the game
+        game_creator = list(active_games[chat_id]["players"].keys())[0] if active_games[chat_id]["players"] else None
+        
+        if user_id != game_creator:
+            # Check if user is admin
+            try:
+                member = await app.get_chat_member(chat_id, user_id)
+                is_admin = member.status in ("creator", "administrator")
+                if not is_admin:
+                    await query.answer("Only the game creator or admins can end the game.", show_alert=True)
+                    return
+            except Exception:
+                await query.answer("Only the game creator or admins can end the game.", show_alert=True)
+                return
+        
+        # Get the word
+        word = active_games[chat_id]["word"]
+        
+        # Format players
+        players_text = []
+        for pid, score in sorted(active_games[chat_id]["players"].items(), key=lambda x: x[1], reverse=True):
+            try:
+                player_name = await get_user_name(chat_id, pid)
+                players_text.append(f"• {player_name}: {score}")
+            except Exception:
+                continue
+                
+        players_text_str = "\n".join(players_text) if players_text else "No players"
+        
+        # Update game message
+        await query.message.edit_text(
+            f"""
+🎮 **Wordle Game Ended**
+
+The word was: **{word}**
+
+**Final Scores:**
+{players_text_str}
+
+Start a new game with /wordle
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎮 New Game", callback_data="wordle_start")]
+            ])
+        )
+        
+        # Delete the game
+        try:
+            del active_games[chat_id]
+        except KeyError:
+            pass
+        
+        await query.answer("Game ended successfully!", show_alert=True)
+    except Exception as e:
+        print(f"Error in end_wordle callback: {e}")
+        await query.answer("Error ending game. Try again.", show_alert=True) 
