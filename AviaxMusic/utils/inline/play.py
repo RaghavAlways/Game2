@@ -6,6 +6,19 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from AviaxMusic.utils.formatters import time_to_seconds
 
 
+def close_keyboard():
+    """Close keyboard markup buttons"""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="🗑 Close",
+                callback_data=f"close",
+            ),
+        ]
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 def track_markup(_, videoid, user_id, channel, fplay):
     buttons = [
         [
