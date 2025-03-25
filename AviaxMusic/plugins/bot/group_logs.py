@@ -2,21 +2,19 @@ from pyrogram import filters
 from pyrogram.types import Message
 from pyrogram.errors import ChatWriteForbidden, ChatAdminRequired
 
-import config
 from AviaxMusic import app
-from AviaxMusic.logging import LOGGER
 from AviaxMusic.misc import SUDOERS
 from AviaxMusic.utils.database import get_cmode
-from config import LOGGER_ID
+from config import LOG_GROUP_ID
 
 async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
     """Send messages to the logger group"""
-    if not LOGGER_ID:
+    if not LOG_GROUP_ID:
         return
     
     try:
         await app.send_message(
-            chat_id=LOGGER_ID,
+            chat_id=LOG_GROUP_ID,
             text=f"""
 🔔 **{alert_type} Alert**
 
@@ -25,7 +23,7 @@ async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
             disable_web_page_preview=True
         )
     except (ChatWriteForbidden, ChatAdminRequired):
-        print(f"Error: Bot doesn't have permission to write in LOGGER_ID ({LOGGER_ID})")
+        print(f"Error: Bot doesn't have permission to write in LOG_GROUP_ID ({LOG_GROUP_ID})")
     except Exception as e:
         print(f"Error sending to logger: {str(e)}")
 
@@ -135,12 +133,12 @@ async def on_left_chat_member(_, message: Message):
 @app.on_message(filters.command("logger") & SUDOERS)
 async def logger_info(_, message: Message):
     """Command to check logger status and ID"""
-    if not LOGGER_ID:
-        await message.reply_text("❌ No LOGGER_ID configured in config.")
+    if not LOG_GROUP_ID:
+        await message.reply_text("❌ No LOG_GROUP_ID configured in config.")
         return
         
     try:
-        chat = await app.get_chat(LOGGER_ID)
+        chat = await app.get_chat(LOG_GROUP_ID)
         await message.reply_text(f"""
 ✅ **Logger Information**
 
@@ -157,7 +155,7 @@ Bot's Permissions:
         await message.reply_text(f"""
 ⚠️ **Logger Error**
 
-The bot is not admin in the logger group (ID: `{LOGGER_ID}`).
+The bot is not admin in the logger group (ID: `{LOG_GROUP_ID}`).
 Please add the bot as admin with permission to send messages.
 """)
     except Exception as e:
@@ -167,5 +165,5 @@ Please add the bot as admin with permission to send messages.
 Failed to get logger group info:
 `{str(e)}`
 
-Current LOGGER_ID: `{LOGGER_ID}`
+Current LOG_GROUP_ID: `{LOG_GROUP_ID}`
 """) 
