@@ -17,11 +17,12 @@ async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
         await app.send_message(
             chat_id=int(LOG_GROUP_ID),
             text=f"""
-🔔 **{alert_type} Alert**
+<b>🔔 {alert_type} Alert</b>
 
 {message}
 """,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            parse_mode="HTML"
         )
     except (ChatWriteForbidden, ChatAdminRequired):
         print(f"Error: Bot doesn't have permission to write in LOG_GROUP_ID ({LOG_GROUP_ID})")
@@ -65,17 +66,17 @@ async def welcome_message(_, message: Message):
                 
                 # Send welcome message
                 welcome_text = f"""
-👋 Thanks for adding me to:
-📝 **Group:** {chat_title}
-🔗 **Group Link:** {chat_username}
-👥 **Members:** {member_count}
+<b>👋 Thanks for adding me!</b>
 
-Added by:
-👤 **Name:** {added_by_name}
-🆔 **ID:** `{added_by_id}`
+<b>Group:</b> {chat_title}
+<b>Link:</b> {chat_username}
+<b>Members:</b> {member_count}
+
+<b>Added by:</b> {added_by_name}
+<b>ID:</b> <code>{added_by_id}</code>
 """
                 try:
-                    await message.reply_text(welcome_text)
+                    await message.reply_text(welcome_text, parse_mode="HTML")
                 except ChatWriteForbidden:
                     print(f"Can't send welcome message in {chat_id}")
                 except FloodWait as e:
@@ -85,18 +86,18 @@ Added by:
                 
                 # Log to logger group
                 log_message = f"""
-✅ **Bot Added to New Group**
+<b>✅ Bot Added to New Group</b>
 
-📮 **Group Details:**
-• Name: {chat_title}
-• ID: `{chat_id}`
-• Link: {chat_username}
-• Members: {member_count}
+<b>Group Details:</b>
+• <b>Name:</b> {chat_title}
+• <b>ID:</b> <code>{chat_id}</code>
+• <b>Link:</b> {chat_username}
+• <b>Members:</b> {member_count}
 
-👤 **Added By:**
-• Name: {added_by_name}
-• ID: `{added_by_id}`
-• Mention: {added_by_mention}
+<b>Added By:</b>
+• <b>Name:</b> {added_by_name}
+• <b>ID:</b> <code>{added_by_id}</code>
+• <b>Mention:</b> {added_by_mention}
 """
                 await send_to_logger(log_message, "NEW GROUP")
                 
@@ -139,18 +140,18 @@ async def on_left_chat_member(_, message: Message):
             
             # Log to logger group
             log_message = f"""
-❌ **Bot Removed from Group**
+<b>❌ Bot Removed from Group</b>
 
-📮 **Group Details:**
-• Name: {chat_title}
-• ID: `{chat_id}`
-• Link: {chat_username}
-• Members: {member_count}
+<b>Group Details:</b>
+• <b>Name:</b> {chat_title}
+• <b>ID:</b> <code>{chat_id}</code>
+• <b>Link:</b> {chat_username}
+• <b>Members:</b> {member_count}
 
-👤 **Removed By:**
-• Name: {removed_by_name}
-• ID: `{removed_by_id}`
-• Mention: {removed_by_mention}
+<b>Removed By:</b>
+• <b>Name:</b> {removed_by_name}
+• <b>ID:</b> <code>{removed_by_id}</code>
+• <b>Mention:</b> {removed_by_mention}
 """
             await send_to_logger(log_message, "REMOVED")
             
@@ -183,37 +184,37 @@ async def logger_info(_, message: Message):
             can_send = "Unknown"
         
         await message.reply_text(f"""
-✅ **Logger Information**
+<b>✅ Logger Information</b>
 
-📮 **Chat Details:**
-• Title: {chat.title}
-• ID: `{chat.id}`
-• Type: {chat.type}
-• Username: @{chat.username if chat.username else 'None'}
+<b>Chat Details:</b>
+• <b>Title:</b> {chat.title}
+• <b>ID:</b> <code>{chat.id}</code>
+• <b>Type:</b> {chat.type}
+• <b>Username:</b> @{chat.username if chat.username else 'None'}
 
-Bot's Permissions:
-• Can Send Messages: {"✅" if can_send is True else "❌" if can_send is False else "⚠️ Unknown"}
-""")
+<b>Bot's Permissions:</b>
+• <b>Can Send Messages:</b> {"✅" if can_send is True else "❌" if can_send is False else "⚠️ Unknown"}
+""", parse_mode="HTML")
     except PeerIdInvalid:
         await message.reply_text(f"""
-⚠️ **Logger Error**
+<b>⚠️ Logger Error</b>
 
-Invalid LOG_GROUP_ID: `{LOG_GROUP_ID}`.
+Invalid LOG_GROUP_ID: <code>{LOG_GROUP_ID}</code>.
 The bot is not in this group. Add the bot to the group and try again.
-""")
+""", parse_mode="HTML")
     except ChatAdminRequired:
         await message.reply_text(f"""
-⚠️ **Logger Error**
+<b>⚠️ Logger Error</b>
 
-The bot is not admin in the logger group (ID: `{LOG_GROUP_ID}`).
+The bot is not admin in the logger group (ID: <code>{LOG_GROUP_ID}</code>).
 Please add the bot as admin with permission to send messages.
-""")
+""", parse_mode="HTML")
     except Exception as e:
         await message.reply_text(f"""
-❌ **Logger Error**
+<b>❌ Logger Error</b>
 
 Failed to get logger group info:
-`{str(e)}`
+<code>{str(e)}</code>
 
-Current LOG_GROUP_ID: `{LOG_GROUP_ID}`
-""") 
+Current LOG_GROUP_ID: <code>{LOG_GROUP_ID}</code>
+""", parse_mode="HTML") 
