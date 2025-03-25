@@ -164,7 +164,7 @@ def stream_markup(_, videoid=None, chat_id=None):
             ),
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
         ],
     ]
@@ -196,7 +196,7 @@ def telegram_markup(_, chat_id):
             ),
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
         ],
     ]
@@ -218,7 +218,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
         [
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
             InlineKeyboardButton(
                 text="🍿 Get Direct Movie 🍿",
@@ -246,7 +246,7 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
         [
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
             InlineKeyboardButton(
                 text="🍿 Get Direct Movie 🍿",
@@ -297,7 +297,7 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
             ),
             InlineKeyboardButton(
                 text="Play Game",
-                callback_data="wordle_button",
+                callback_data="start_wordle",
             ),
         ],
     ]

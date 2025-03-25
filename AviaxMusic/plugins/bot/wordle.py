@@ -1,6 +1,7 @@
 import random
 import asyncio
 import re
+import time
 from typing import Dict, List, Set
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -20,6 +21,23 @@ WORD_LIST = [
     "GRASP", "GRAVE", "GROVE", "HORSE", "IVORY", "JEWEL", "JUICE", "NOVEL", "PLUCK", "PRICE",
     "PRIDE", "PROOF", "QUIET", "RAZOR", "REPLY", "SOLAR", "SPARK", "SPEAK", "STAND", "STONE",
     "STYLE", "SUGAR", "TASTE", "THEME", "THING", "THROW", "TWIST", "VERSE", "WAGON", "WATCH"
+]
+
+# Add more popular 5-letter words that are common and fun to guess
+POPULAR_WORDS = [
+    "ABOUT", "ABOVE", "ACTOR", "ADAPT", "AFTER", "AGAIN", "AGREE", "ALBUM", 
+    "ALONE", "ALONG", "AMONG", "ANGEL", "ANGER", "ANGLE", "ANGRY", "ANIME", 
+    "ANKLE", "APART", "APPLE", "ARGUE", "ARISE", "ARROW", "ASSET", "AUDIT", 
+    "AVOID", "AWARD", "AWARE", "BACON", "BADGE", "BAGEL", "BAKER", "BASIC", 
+    "BEACH", "BEARD", "BEAST", "BEGIN", "BEING", "BELOW", "BENCH", "BIRTH", 
+    "BLACK", "BLADE", "BLAME", "BLANK", "BLAST", "BLAZE", "BLEND", "BLESS", 
+    "BLIND", "BLOCK", "BLOOD", "BLOOM", "BLUES", "BLUFF", "BLUNT", "BOARD", 
+    "BOOST", "BOOTH", "BRAVE", "BREAD", "BREAK", "BRIDE", "BRIEF", "BRING", 
+    "BROAD", "BROWN", "BRUSH", "BUILD", "BUNCH", "BURST", "CABIN", "CABLE", 
+    "CANDY", "CARGO", "CARRY", "CATCH", "CAUSE", "CHAIN", "CHAIR", "CHALK", 
+    "CHARM", "CHART", "CHASE", "CHEAP", "CHECK", "CHEST", "CHIEF", "CHILD", 
+    "CHILL", "CHIPS", "CHOIR", "CHORD", "CLAIM", "CLASS", "CLEAN", "CLEAR", 
+    "CLIMB", "CLOCK", "CLOSE", "CLOUD", "CLOWN", "COACH", "COAST", "COLOR"
 ]
 
 # Dictionary to store active games: {chat_id: {word: str, attempts: List[str], players: Dict[int, int], current_player: int}}
@@ -134,15 +152,20 @@ async def start_wordle(_, message: Message):
         )
         return
 
-    # Start new game
-    word = random.choice(WORD_LIST)
+    # Start new game - use popular words 70% of the time for better gameplay
+    if random.random() < 0.7 and POPULAR_WORDS:
+        word = random.choice(POPULAR_WORDS)
+    else:
+        word = random.choice(WORD_LIST)
     
     # Initialize the game
     active_games[chat_id] = {
         "word": word,
         "attempts": [],
         "players": {user_id: 0},  # Initialize with the creator's score
-        "current_player": user_id  # First player is the creator
+        "current_player": user_id,  # First player is the creator
+        "hints_used": 0,  # Track hints usage
+        "start_time": int(time.time())  # Track game start time
     }
     
     # Send initial game message
@@ -164,7 +187,10 @@ To make a guess, send: `/guess WORD`
 {await create_game_message(chat_id)}
 """,
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+            [
+                InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
+                InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
+            ],
             [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
         ])
     )
@@ -672,4 +698,105 @@ Start a new game with /wordle
         await query.answer("Game ended successfully!", show_alert=True)
     except Exception as e:
         print(f"Error in end_wordle callback: {e}")
-        await query.answer("Error ending game. Try again.", show_alert=True) 
+        await query.answer("Error ending game. Try again.", show_alert=True)
+
+@app.on_callback_query(filters.regex("wordle_hint"))
+async def wordle_hint_callback(_, query: CallbackQuery):
+    """Provide a hint for the current Wordle game"""
+    try:
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+        
+        # Check if there's a game in progress
+        if chat_id not in active_games:
+            await query.answer("No active game found. Start one with /wordle", show_alert=True)
+            return
+        
+        # Check if user is in the game
+        if user_id not in active_games[chat_id]["players"]:
+            await query.answer("You need to join the game first to get hints!", show_alert=True)
+            return
+        
+        # Limit hints to 3 per game
+        if active_games[chat_id].get("hints_used", 0) >= 3:
+            await query.answer("Maximum hints (3) already used for this game!", show_alert=True)
+            return
+        
+        # Get the current word and give a hint
+        word = active_games[chat_id]["word"]
+        attempts = active_games[chat_id]["attempts"]
+        
+        if not attempts:
+            # First hint - just give the first letter
+            hint = f"The word starts with '{word[0]}'"
+        elif len(attempts) == 1:
+            # Second hint - give another letter position
+            # Try to find a position where no one has guessed correctly yet
+            correct_positions = set()
+            for attempt in attempts:
+                for i, letter in enumerate(attempt):
+                    if letter == word[i]:
+                        correct_positions.add(i)
+            
+            # Find a position that hasn't been guessed correctly yet
+            available_positions = [i for i in range(len(word)) if i not in correct_positions and i != 0]
+            
+            if available_positions:
+                pos = random.choice(available_positions)
+                hint = f"The letter at position {pos+1} is '{word[pos]}'"
+            else:
+                # If all positions have been guessed correctly (unlikely), give a different type of hint
+                hint = f"The word ends with '{word[-1]}'"
+        else:
+            # Third or later hint - give a more substantial hint
+            # Provide a definition or context for the word
+            hint_map = {
+                "APPLE": "A common fruit that keeps the doctor away",
+                "EARTH": "The planet we live on",
+                "MUSIC": "Something you listen to that has rhythm and melody",
+                "WATER": "Essential liquid for life",
+                # Add more hints for common words
+            }
+            
+            hint = hint_map.get(word, f"This word contains the letters: {', '.join(sorted(set(word[1:-1])))}")
+        
+        # Increment hints used
+        active_games[chat_id]["hints_used"] = active_games[chat_id].get("hints_used", 0) + 1
+        
+        # Send the hint
+        await query.answer(f"HINT: {hint}", show_alert=True)
+        
+        # Update the game message to show that a hint was used
+        try:
+            updated_message = await create_game_message(chat_id)
+            await query.message.edit_text(
+                f"""
+🎮 **Wordle Game in Progress**
+Word length: **5 letters**
+
+**How to Play:**
+1. You have to guess a random 5-letter word.
+2. After each guess, you'll get hints:
+   - 🟩 - Correct letter in the right spot.
+   - 🟨 - Correct letter in the wrong spot.
+   - 🟥 - Letter not in the word.
+
+💡 Hints used: {active_games[chat_id]["hints_used"]}/3
+
+To make a guess, send: `/guess WORD`
+{updated_message}
+""",
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join"),
+                        InlineKeyboardButton("💡 Hint", callback_data="wordle_hint")
+                    ],
+                    [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+                ])
+            )
+        except Exception as e:
+            print(f"Error updating hint message: {e}")
+        
+    except Exception as e:
+        print(f"Error in hint callback: {e}")
+        await query.answer("Error providing hint. Try again.", show_alert=True) 

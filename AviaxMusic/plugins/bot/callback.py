@@ -86,30 +86,80 @@ async def stream_menu_cb(client, CallbackQuery, _):
 
 @app.on_callback_query(filters.regex("wordle_button") & ~BANNED_USERS)
 async def wordle_button_callback(client, CallbackQuery):
+    """Handle Wordle game start from music player interface"""
     try:
-        await CallbackQuery.answer("Starting a new Wordle game...")
-        message = CallbackQuery.message
+        # Acknowledge the button press
+        await CallbackQuery.answer("Starting Wordle game...")
         
-        # Simulate a proper message object for start_wordle
-        message.command = ["wordle"]
-        message.from_user = CallbackQuery.from_user
-        message.chat = CallbackQuery.message.chat
+        chat_id = CallbackQuery.message.chat.id
+        user_id = CallbackQuery.from_user.id
         
-        print(f"Starting wordle game from button. User: {message.from_user.id}, Chat: {message.chat.id}")
+        # Direct import to ensure latest version is used
+        from AviaxMusic.plugins.bot.wordle import active_games, WORD_LIST
+        import random
         
-        # Create a new reply message to the current message
-        new_message = await message.reply_text("Starting Wordle game...")
+        # Check if there's already a game in this chat
+        if chat_id in active_games:
+            # Reply with link to existing game
+            await CallbackQuery.message.reply_text(
+                "A Wordle game is already in progress in this chat!",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➡️ Show Game", callback_data="wordle_show")]
+                ])
+            )
+            return
         
-        # Modify the message to simulate a proper command message
-        new_message.command = ["wordle"]
-        new_message.from_user = CallbackQuery.from_user
+        # Create a new game directly instead of calling start_wordle
+        word = random.choice(WORD_LIST)
         
-        # Import the wordle module and call start_wordle function with the new message
-        from AviaxMusic.plugins.bot.wordle import start_wordle
-        await start_wordle(client, new_message)
+        # Initialize the game
+        active_games[chat_id] = {
+            "word": word,
+            "attempts": [],
+            "players": {user_id: 0},  # Initialize with the creator's score
+            "current_player": user_id  # First player is the creator
+        }
         
-        # Delete the starting message to keep the chat clean
-        await new_message.delete()
+        # Import create_game_message to generate game state
+        from AviaxMusic.plugins.bot.wordle import create_game_message
+        
+        # Send game message
+        game_message = await CallbackQuery.message.reply_text(
+            f"""
+🎮 **New Wordle Game Started by {CallbackQuery.from_user.first_name}!**
+Word length: **5 letters**
+
+**How to Play:**
+1. You have to guess a random 5-letter word.
+2. After each guess, you'll get hints:
+   - 🟩 - Correct letter in the right spot.
+   - 🟨 - Correct letter in the wrong spot.
+   - 🟥 - Letter not in the word.
+3. The game will run until the word is found or a maximum of 30 guesses are reached.
+4. The first person to guess the word correctly wins.
+
+To make a guess, send: `/guess WORD`
+{await create_game_message(chat_id)}
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔍 Join Game", callback_data="wordle_join")],
+                [InlineKeyboardButton("🚫 End Game", callback_data="wordle_end")]
+            ])
+        )
+        
+        # Store the message ID for updates
+        active_games[chat_id]["message_id"] = game_message.id
+        
+        print(f"Wordle game started by {user_id} in chat {chat_id}, word: {word}")
+        
     except Exception as e:
-        print(f"Error in wordle button callback: {str(e)}")
-        await CallbackQuery.answer(f"Error starting game: {str(e)[:50]}... Try /wordle command instead.", show_alert=True) 
+        # Detailed error logging
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error in wordle_button_callback: {str(e)}\n{error_trace}")
+        
+        # More helpful error message to user
+        await CallbackQuery.answer(
+            "Could not start game. Try using /wordle command instead.", 
+            show_alert=True
+        ) 
