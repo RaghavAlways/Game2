@@ -191,20 +191,12 @@ def stream_markup(_, videoid=None, chat_id=None):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", callback_data=f"ADMIN Shuffle|{chat_id}"
+                text="⇆ Shuffle", 
+                callback_data=f"ADMIN Shuffle|{chat_id}"
             ),
             InlineKeyboardButton(
-                text="↻ Loop", callback_data=f"ADMIN Loop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="⏮ 10 Sec",
-                callback_data=f"ADMIN 1|{chat_id}",
-            ),
-            InlineKeyboardButton(
-                text="⏭ 10 Sec",
-                callback_data=f"ADMIN 2|{chat_id}",
+                text="↻ Loop", 
+                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [
@@ -213,26 +205,14 @@ def stream_markup(_, videoid=None, chat_id=None):
                 callback_data="wordle_button",
             ),
         ],
+        [
+            InlineKeyboardButton(
+                text="🗑 Close", 
+                callback_data=f"close"
+            ),
+        ],
     ]
     
-    # Only add the back button if videoid is provided
-    if videoid:
-        buttons.append([
-            InlineKeyboardButton(
-                text="≼ Back",
-                callback_data=f"MainMarkup {videoid}|{chat_id}",
-            ),
-            InlineKeyboardButton(
-                text="🗑 Close", callback_data=f"close"
-            ),
-        ])
-    else:
-        buttons.append([
-            InlineKeyboardButton(
-                text="🗑 Close", callback_data=f"close"
-            ),
-        ])
-        
     return buttons
 
 
@@ -255,10 +235,12 @@ def telegram_markup(_, chat_id):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", callback_data=f"ADMIN Shuffle|{chat_id}"
+                text="⇆ Shuffle", 
+                callback_data=f"ADMIN Shuffle|{chat_id}"
             ),
             InlineKeyboardButton(
-                text="↻ Loop", callback_data=f"ADMIN Loop|{chat_id}"
+                text="↻ Loop", 
+                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [
@@ -269,7 +251,8 @@ def telegram_markup(_, chat_id):
         ],
         [
             InlineKeyboardButton(
-                text="🗑 Close", callback_data=f"close"
+                text="🗑 Close", 
+                callback_data=f"close"
             ),
         ],
     ]
