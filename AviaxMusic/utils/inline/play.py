@@ -22,7 +22,11 @@ def track_markup(_, videoid, user_id, channel, fplay):
             InlineKeyboardButton(
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
-            )
+            ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -87,6 +91,10 @@ def stream_markup_timer(_, chat_id, played, dur):
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
             ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -120,6 +128,10 @@ def stream_markup(_, chat_id):
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
             ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -148,6 +160,10 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
             ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -171,6 +187,10 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
             InlineKeyboardButton(
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
             ),
         ],
         [
@@ -214,6 +234,10 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
             InlineKeyboardButton(
                 text="🎬 Get Direct Movie 🎬",
                 url="https://t.me/LB_Movies"
+            ),
+            InlineKeyboardButton(
+                text="🎮 Wordle Game",
+                callback_data="start_wordle",
             ),
         ],
     ]
