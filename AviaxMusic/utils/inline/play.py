@@ -78,16 +78,6 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", 
-                callback_data=f"ADMIN Shuffle|{chat_id}"
-            ),
-            InlineKeyboardButton(
-                text="↻ Loop", 
-                callback_data=f"ADMIN Loop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
                 text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
@@ -123,16 +113,6 @@ def telegram_markup_timer(_, chat_id, played, dur):
             ),
             InlineKeyboardButton(
                 text="▢", callback_data=f"ADMIN Stop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="⇆ Shuffle", 
-                callback_data=f"ADMIN Shuffle|{chat_id}"
-            ),
-            InlineKeyboardButton(
-                text="↻ Loop", 
-                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [
@@ -179,16 +159,6 @@ def stream_markup(_, videoid=None, chat_id=None):
         ],
         [
             InlineKeyboardButton(
-                text="⇆ Shuffle", 
-                callback_data=f"ADMIN Shuffle|{chat_id}"
-            ),
-            InlineKeyboardButton(
-                text="↻ Loop", 
-                callback_data=f"ADMIN Loop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
                 text="🍿 Get Direct Movie 🍿",
                 url="https://t.me/LB_Movies"
             ),
@@ -217,16 +187,6 @@ def telegram_markup(_, chat_id):
             ),
             InlineKeyboardButton(
                 text="▢", callback_data=f"ADMIN Stop|{chat_id}"
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                text="⇆ Shuffle", 
-                callback_data=f"ADMIN Shuffle|{chat_id}"
-            ),
-            InlineKeyboardButton(
-                text="↻ Loop", 
-                callback_data=f"ADMIN Loop|{chat_id}"
             ),
         ],
         [

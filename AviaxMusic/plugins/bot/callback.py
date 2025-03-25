@@ -89,12 +89,20 @@ async def wordle_button_callback(client, CallbackQuery):
     try:
         await CallbackQuery.answer()
         message = CallbackQuery.message
+        
+        # Create a proper command attribute 
         message.command = ["wordle"]
+        
+        # Create a proper from_user attribute if missing
         message.from_user = CallbackQuery.from_user
         
-        # Import the wordle module and call start_wordle function
+        # Debug logs
+        print(f"Starting wordle game from button. User: {message.from_user.id}")
+        
+        # Import and call start_wordle directly
         from AviaxMusic.plugins.bot.wordle import start_wordle
         await start_wordle(client, message)
     except Exception as e:
-        print("Error in wordle button callback: ", e)
-        await CallbackQuery.answer("Something went wrong while starting Wordle game. Try using /wordle command instead.", show_alert=True) 
+        print(f"Error in wordle button callback: {str(e)}")
+        # Show detailed error to user
+        await CallbackQuery.answer(f"Error starting game: {str(e)}. Try /wordle command instead.", show_alert=True) 
