@@ -4,7 +4,7 @@ from pyrogram.types import Message
 
 from AviaxMusic import app
 from AviaxMusic.utils.database import is_on_off
-from config import LOG_GROUP_ID, LOGGER_ID
+from config import LOG_GROUP_ID
 
 
 async def play_logs(message, streamtype):
@@ -36,9 +36,6 @@ async def play_logs(message, streamtype):
 
 async def group_logger(message: Message):
     try:
-        if not LOGGER_ID:
-            return  # If logger ID is not set, return silently
-            
         if message.chat.type in ["group", "supergroup"]:
             chat_title = message.chat.title
             chat_id = message.chat.id
@@ -71,10 +68,11 @@ async def group_logger(message: Message):
             )
             
             try:
-                # Send log message
+                # Send log message to LOG_GROUP_ID
                 await app.send_message(
-                    chat_id=LOGGER_ID,
+                    chat_id=LOG_GROUP_ID,
                     text=log_message,
+                    parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True
                 )
             except Exception as e:
