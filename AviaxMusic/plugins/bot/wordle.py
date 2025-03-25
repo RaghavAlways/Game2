@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Set
 from pyrogram import filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from pyrogram.errors import UserNotParticipant, FloodWait
+from pyrogram.errors import UserNotParticipant, FloodWait, MessageNotModified
 from AviaxMusic import app
 from AviaxMusic.misc import SUDOERS
 
@@ -42,6 +42,25 @@ POPULAR_WORDS = [
 
 # Dictionary to store active games: {chat_id: {word: str, attempts: List[str], players: Dict[int, int], current_player: int}}
 active_games = {}
+
+# List to track message IDs for cleanup
+game_messages = {}  # {chat_id: [message_ids]}
+
+# Function to handle message cleanup
+async def cleanup_messages(chat_id, delay=20):
+    """Delete old game messages after a delay"""
+    await asyncio.sleep(delay)
+    if chat_id in game_messages and len(game_messages[chat_id]) > 1:
+        # Keep the most recent message
+        messages_to_delete = game_messages[chat_id][:-1]
+        for msg_id in messages_to_delete:
+            try:
+                await app.delete_messages(chat_id, msg_id)
+            except Exception as e:
+                print(f"Error deleting message {msg_id}: {e}")
+        
+        # Update the list to only include the latest message
+        game_messages[chat_id] = game_messages[chat_id][-1:]
 
 async def get_user_name(chat_id: int, user_id: int) -> str:
     """Safely get user name with error handling"""
@@ -86,9 +105,9 @@ async def create_game_message(chat_id, available_letters=None, extra_text="", hi
     correct_letters = game_data.get("correct_letters", set())
     displayed_word = "".join([char.upper() if char.upper() in correct_letters else "_" for char in word])
     
-    # Create the concise game status message
+    # Create the concise game status message without extra formatting
     message = (
-        f"🎮 **WORDLE**\n"
+        f"🎮 WORDLE\n"
         f"Word: `{displayed_word}`\n"
         f"Tries: {len(attempts)}/6 • Players: {len(players)}\n"
     )
@@ -102,10 +121,10 @@ async def create_game_message(chat_id, available_letters=None, extra_text="", hi
     if letters_display:
         message += f"Letters: `{letters_display}`\n"
     
-    # Create compact markup
+    # Create compact markup with consistent callback data
     markup = [
         [
-            InlineKeyboardButton("Join", callback_data="join_wordle"),
+            InlineKeyboardButton("Join", callback_data="wordle_join"),
             InlineKeyboardButton("Hint", callback_data="wordle_hint"),
             InlineKeyboardButton("Reset", callback_data="game_error_recovery")
         ]
@@ -136,12 +155,18 @@ async def start_wordle(_, message: Message):
     
     # Check if there's already a game in this chat
     if chat_id in active_games:
-        await message.reply_text(
+        reply = await message.reply_text(
             "❗ Game already in progress!",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Show Game", callback_data="wordle_show")]
             ])
         )
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
 
     # Start new game - use popular words 70% of the time for better gameplay
@@ -162,15 +187,17 @@ async def start_wordle(_, message: Message):
     }
     
     # Send concise initial game message
-    game_message = await message.reply_text(
-        f"""
-🎮 **Wordle Game Started!**
+    game_message = f"""
+🎮 Wordle Game Started!
 • Guess the 5-letter word
 • 🟩 Right letter, right spot
 • 🟨 Right letter, wrong spot
 • 🟥 Letter not in word
 Use: `/guess WORD`
-""",
+"""
+    
+    reply = await message.reply_text(
+        game_message,
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("Join", callback_data="wordle_join"),
@@ -179,8 +206,15 @@ Use: `/guess WORD`
         ])
     )
     
+    # Start tracking messages for this chat
+    if chat_id not in game_messages:
+        game_messages[chat_id] = []
+    
+    # Add this message to the list
+    game_messages[chat_id].append(reply.id)
+    
     # Store the message ID for updates
-    active_games[chat_id]["message_id"] = game_message.id
+    active_games[chat_id]["message_id"] = reply.id
 
 @app.on_message(filters.command("guess") & filters.group)
 async def make_guess(_, message: Message):
@@ -194,36 +228,66 @@ async def make_guess(_, message: Message):
     
     # Check if user is a player
     if user_id not in active_games[chat_id]["players"]:
-        await message.reply_text(
+        reply = await message.reply_text(
             "❌ Join the game first",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Game", callback_data="wordle_join")]
             ])
         )
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
     
     # Check if it's the user's turn
     if user_id != active_games[chat_id]["current_player"]:
         current_player_name = await get_user_name(chat_id, active_games[chat_id]["current_player"])
-        await message.reply_text(f"❌ Not your turn. Wait for {current_player_name}.")
+        reply = await message.reply_text(f"❌ Not your turn. Wait for {current_player_name}.")
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
     
     # Get the guess
     if len(message.command) < 2:
-        await message.reply_text("❗ Provide a word: `/guess WORD`")
+        reply = await message.reply_text("❗ Provide a word: `/guess WORD`")
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
     
     guess = message.command[1].upper()
     
     # Validate guess is only letters
     if not re.match(r'^[A-Za-z]+$', guess):
-        await message.reply_text("❗ Only letters allowed")
+        reply = await message.reply_text("❗ Only letters allowed")
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
     
     # Validate guess length
     word = active_games[chat_id]["word"]
     if len(guess) != len(word):
-        await message.reply_text(f"❗ Must be {len(word)} letters")
+        reply = await message.reply_text(f"❗ Must be {len(word)} letters")
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
+        # Schedule cleanup
+        asyncio.create_task(cleanup_messages(chat_id))
         return
     
     # Add the guess to attempts
@@ -248,19 +312,24 @@ async def make_guess(_, message: Message):
         # Get attempt count
         attempts_count = len(active_games[chat_id]["attempts"])
         
-        # Create winner message (simplified)
+        # Create winner message (simplified without bold formatting)
         winner_message = f"""
-🎉 {message.from_user.first_name} guessed: **{word}**!
+🎉 {message.from_user.first_name} guessed: {word}!
 ✅ Solved in {attempts_count} attempts
 """
         
         # Send the winner message and clean up
-        await message.reply_text(
+        reply = await message.reply_text(
             winner_message,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
         )
+        
+        # Add to cleanup list but with longer delay for winning message
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
         
         # Delete the game
         try:
@@ -285,14 +354,19 @@ async def make_guess(_, message: Message):
     # Check if max attempts reached
     if len(active_games[chat_id]["attempts"]) >= 30:
         # Game over - no one guessed correctly (simplified)
-        game_over_message = f"❌ Game over! Word was: **{word}**"
+        game_over_message = f"❌ Game over! Word was: {word}"
         
-        await message.reply_text(
+        reply = await message.reply_text(
             game_over_message,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("New Game", callback_data="wordle_start")]
             ])
         )
+        
+        # Add to cleanup list
+        if chat_id not in game_messages:
+            game_messages[chat_id] = []
+        game_messages[chat_id].append(reply.id)
         
         # Delete the game
         try:
@@ -302,7 +376,7 @@ async def make_guess(_, message: Message):
             
         return
     
-    # Show updated game status (simplified)
+    # Show updated game status (simplified without bold formatting for guess)
     next_player = await get_user_name(chat_id, active_games[chat_id]["current_player"])
     
     # Get remaining letters
@@ -321,7 +395,7 @@ async def make_guess(_, message: Message):
     masked_word = "".join([letter if letter in active_games[chat_id]["correct_letters"] else "_" for letter in word.upper()])
     
     game_message = f"""
-🎲 {message.from_user.first_name}: **{guess}**
+🎲 {message.from_user.first_name}: {guess}
 {result}
 
 🎯 Word: `{masked_word}` ({len(active_games[chat_id]["attempts"])}/30)
@@ -329,7 +403,7 @@ async def make_guess(_, message: Message):
 🔤 Available: `{formatted_letters.strip()}`
 """
     
-    await message.reply_text(
+    reply = await message.reply_text(
         game_message,
         reply_markup=InlineKeyboardMarkup([
             [
@@ -338,6 +412,13 @@ async def make_guess(_, message: Message):
             ]
         ])
     )
+    
+    # Add to cleanup list
+    if chat_id not in game_messages:
+        game_messages[chat_id] = []
+    game_messages[chat_id].append(reply.id)
+    # Schedule cleanup
+    asyncio.create_task(cleanup_messages(chat_id))
 
 @app.on_callback_query(filters.regex("^wordle_"))
 async def wordle_callback(_, query: CallbackQuery):
@@ -512,6 +593,14 @@ async def join_wordle_callback(_, query: CallbackQuery):
             await query.message.edit_text(message, reply_markup=markup)
             await query.answer("Joined! Use /guess WORD to play")
             
+            # Message updated, add to tracking
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(query.message.id)
+            
+        except MessageNotModified:
+            # Message content was not modified, ignore this error
+            pass
         except Exception as e:
             print(f"Error updating game message: {e}")
             await query.answer("Joined, but couldn't update message", show_alert=True)
@@ -662,6 +751,15 @@ async def wordle_hint_callback(_, query: CallbackQuery):
             
             # Edit the message
             await query.message.edit_text(message, reply_markup=markup)
+            
+            # Add to cleanup list
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(query.message.id)
+            
+        except MessageNotModified:
+            # Message content was not modified, ignore this error
+            pass
         except Exception as e:
             print(f"Error updating hint message: {e}")
         
