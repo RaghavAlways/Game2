@@ -37,7 +37,7 @@ async def on_new_chat_members(_, message: Message):
                     # Send welcome message in the group
                     welcome_message = (
                         "👋 Thanks for adding me!\n\n"
-                        " I'm a powerful music bot with many features.\n"
+                        "🎵 I'm a powerful music bot with many features.\n"
                         "🔰 To see my commands, type /help\n\n"
                         "⚡️ Make me admin to use my full potential!"
                     )
@@ -56,6 +56,7 @@ async def on_new_chat_members(_, message: Message):
 async def on_left_chat_member(_, message: Message):
     """Handler for when bot is removed from a group"""
     try:
+        # Check if the removed member is our bot
         if message.left_chat_member and message.left_chat_member.id == app.id:
             LOGGER(__name__).info(f"Bot removed from {message.chat.title} ({message.chat.id})")
             try:
@@ -73,20 +74,41 @@ async def on_left_chat_member(_, message: Message):
                 else:
                     user_info = "👤 <b>Removed By:</b> Unknown User"
 
-                log_message = (
-                    "❌ <b>Bot Removed from Group</b>\n\n"
+                # Get group info
+                group_info = (
                     f"📮 <b>Group:</b> {message.chat.title}\n"
                     f"🆔 <b>Group ID:</b> <code>{message.chat.id}</code>\n"
                     f"🔗 <b>Username:</b> @{message.chat.username or 'Private Group'}\n"
-                    f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}\n"
+                    f"👥 <b>Total Members:</b> {await app.get_chat_members_count(message.chat.id)}"
+                )
+
+                log_message = (
+                    "❌ <b>Bot Removed from Group</b>\n\n"
+                    f"{group_info}\n\n"
                     f"{user_info}"
                 )
-                await app.send_message(
-                    chat_id=config.LOG_GROUP_ID,
-                    text=log_message,
-                    disable_web_page_preview=True
-                )
+
+                # Send log message
+                try:
+                    await app.send_message(
+                        chat_id=config.LOG_GROUP_ID,
+                        text=log_message,
+                        disable_web_page_preview=True
+                    )
+                    LOGGER(__name__).info(f"Successfully sent removal log message for group {message.chat.id}")
+                except Exception as e:
+                    LOGGER(__name__).error(f"Failed to send removal log message: {str(e)}")
+                    # Try alternative method if the first one fails
+                    try:
+                        await app.send_message(
+                            chat_id=config.LOG_GROUP_ID,
+                            text=f"❌ Bot was removed from group {message.chat.title} by {user.mention if user else 'Unknown User'}",
+                            disable_web_page_preview=True
+                        )
+                    except Exception as e2:
+                        LOGGER(__name__).error(f"Failed to send alternative log message: {str(e2)}")
+
             except Exception as e:
-                LOGGER(__name__).error(f"Failed to send removal log message: {str(e)}")
+                LOGGER(__name__).error(f"Error processing removal log: {str(e)}")
     except Exception as e:
         LOGGER(__name__).error(f"Error in left chat member handler: {str(e)}") 
