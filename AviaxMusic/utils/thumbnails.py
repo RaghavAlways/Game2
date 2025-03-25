@@ -107,6 +107,47 @@ def draw_text_with_shadow(background, draw, position, text, font, fill, shadow_o
     
     draw.text(position, text, font=font, fill=fill)
 
+def add_green_boundary(image, border_width=3, border_color=(0, 255, 0, 255)):
+    """Add a green boundary line to the image with a glow effect"""
+    width, height = image.size
+    new_width = width + 2 * border_width
+    new_height = height + 2 * border_width
+    
+    # Create a new image with green border
+    new_image = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
+    
+    # Add glow effect
+    glow = Image.new("RGBA", (new_width, new_height), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow)
+    glow_draw.rectangle([(0, 0), (new_width, new_height)], outline=border_color, width=border_width)
+    
+    # Apply blur to create glow
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=2))
+    
+    # Paste the original image
+    new_image.paste(image, (border_width, border_width))
+    
+    # Composite with glow
+    new_image = Image.alpha_composite(new_image, glow)
+    
+    return new_image
+
+def enhance_thumbnail(image):
+    """Enhance thumbnail with cool effects"""
+    # Increase contrast
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(1.2)
+    
+    # Increase sharpness
+    enhancer = ImageEnhance.Sharpness(image)
+    image = enhancer.enhance(1.2)
+    
+    # Slightly increase brightness
+    enhancer = ImageEnhance.Brightness(image)
+    image = enhancer.enhance(1.1)
+    
+    return image
+
 async def gen_thumb(videoid: str):
     try:
         if os.path.isfile(f"cache/{videoid}_v4.png"):
@@ -241,6 +282,12 @@ async def gen_thumb(videoid: str):
 
         background_path = f"cache/{videoid}_v4.png"
         background.save(background_path)
+        
+        # After creating the base image, enhance it
+        image = enhance_thumbnail(background)
+        
+        # Add green boundary with glow effect
+        image = add_green_boundary(image)
         
         return background_path
 
