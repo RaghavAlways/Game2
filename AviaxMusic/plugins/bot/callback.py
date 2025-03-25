@@ -1,7 +1,6 @@
 from pyrogram import filters
 from pyrogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from AviaxMusic import app
-from AviaxMusic.plugins.bot.wordle import start_wordle
 from AviaxMusic.core.call import Aviax
 from AviaxMusic.misc import db
 from AviaxMusic.utils.database import set_loop
@@ -9,19 +8,6 @@ from AviaxMusic.utils.decorators.language import languageCB
 from AviaxMusic.utils.inline.play import close_keyboard, stream_markup, telegram_markup
 from AviaxMusic.utils.stream.stream import stream
 from config import BANNED_USERS
-
-@app.on_callback_query(filters.regex("start_wordle"))
-async def start_wordle_from_button(_, query: CallbackQuery):
-    try:
-        # Simulate /wordle command
-        message = query.message
-        message.command = ["wordle"]
-        message.from_user = query.from_user
-        await start_wordle(_, message)
-        await query.answer()
-    except Exception as e:
-        print(e)
-        await query.answer("Error starting game! Try using /wordle command.", show_alert=True)
 
 @app.on_callback_query(filters.regex("get_movie"))
 async def get_movie_callback(_, query: CallbackQuery):
@@ -84,15 +70,26 @@ async def stream_menu_cb(client, CallbackQuery, _):
         print("Error in LiveAction callback: ", e)
         pass
 
-@app.on_callback_query(filters.regex("wordle_button") & ~BANNED_USERS)
+@app.on_callback_query(filters.regex("wordle_button|start_wordle") & ~BANNED_USERS)
 async def wordle_button_callback(client, CallbackQuery):
     """Handle Wordle game start from music player interface"""
     try:
-        # Use wordle_start handler for consistency 
+        # Better user feedback
         await CallbackQuery.answer("Starting Wordle game...")
         
-        # Forward to the start_wordle handler which is properly implemented in wordle.py
-        return await start_wordle_from_button(client, CallbackQuery)
+        # Fix: Create proper message attributes
+        message = CallbackQuery.message
+        message.command = ["wordle"]
+        message.from_user = CallbackQuery.from_user
+        
+        # Log the attempt for debugging
+        print(f"Starting Wordle game from button. User: {CallbackQuery.from_user.id}, Chat: {CallbackQuery.message.chat.id}")
+        
+        # Import directly to ensure we get the latest version
+        from AviaxMusic.plugins.bot.wordle import start_wordle
+        
+        # Start the game
+        await start_wordle(client, message)
         
     except Exception as e:
         # Detailed error logging
@@ -102,6 +99,6 @@ async def wordle_button_callback(client, CallbackQuery):
         
         # More helpful error message to user
         await CallbackQuery.answer(
-            "Could not start game. Try using /wordle command instead.", 
+            "Could not start game. Try using /wordle command directly.", 
             show_alert=True
         ) 

@@ -206,58 +206,150 @@ async def gen_thumb(videoid: str):
                     f = await aiofiles.open(f"cache/thumb{videoid}.png", mode="wb")
                     await f.write(await resp.read())
                     await f.close()
-
-        # Process main background - use full-sized image without circular crop
+        
+        # Process main background image
         youtube = Image.open(f"cache/thumb{videoid}.png")
-        # Use a larger size for the music image
-        image1 = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
-        background = image1.convert("RGBA")
+        image_background = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
+        background = image_background.convert("RGBA")
         
         # Enhance background
         background = enhance_thumbnail(background)
         
-        # Add a simple border with glow
-        border_width = 12  # Increased border size
-        bordered_bg = Image.new('RGBA', (1280 + border_width*2, 720 + border_width*2), (0, 0, 0, 0))
+        # Create a circular thumbnail for the top-left corner
+        # Extract a square portion from the center of the image
+        square_size = min(background.width, background.height)
+        left = (background.width - square_size) // 2
+        top = (background.height - square_size) // 2
+        right = left + square_size
+        bottom = top + square_size
+        square_img = background.crop((left, top, right, bottom))
+        
+        # Create a circular mask
+        circle_size = 300  # Size of the circular thumbnail
+        circle_img = square_img.resize((circle_size, circle_size), Image.Resampling.LANCZOS)
+        
+        # Create the circular mask
+        mask = Image.new('L', (circle_size, circle_size), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, circle_size, circle_size), fill=255)
+        
+        # Create the circular thumbnail with white border
+        circle_border_size = 310  # Slightly larger for border
+        circle_border = Image.new('RGBA', (circle_border_size, circle_border_size), (255, 255, 255, 0))
+        circle_border_draw = ImageDraw.Draw(circle_border)
+        circle_border_draw.ellipse((0, 0, circle_border_size-1, circle_border_size-1), outline=(255, 255, 255, 255), width=5)
+        
+        # Apply the circular mask to the image
+        circle_output = Image.new('RGBA', (circle_size, circle_size), (0, 0, 0, 0))
+        circle_output.paste(circle_img, (0, 0), mask)
+        
+        # Add a green glow around the circular thumbnail
+        glow_size = circle_size + 20
+        glow_img = Image.new('RGBA', (glow_size, glow_size), (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow_img)
+        
+        # Draw multiple circles for a glowing effect
+        for i in range(5):
+            glow_draw.ellipse(
+                (i, i, glow_size-i-1, glow_size-i-1),
+                outline=(0, 255, 0, 200 - i * 40),
+                width=2
+            )
+        
+        # Apply blur to the glow
+        glow_img = glow_img.filter(ImageFilter.GaussianBlur(radius=3))
+        
+        # Create the final background with border
+        border_width = 12
+        final_width = 1280 + border_width*2
+        final_height = 720 + border_width*2
+        final_img = Image.new('RGBA', (final_width, final_height), (0, 0, 0, 0))
         
         # Draw green border with glow
-        border_draw = ImageDraw.Draw(bordered_bg)
-        
-        # Draw multiple glowing borders
-        for offset in range(6):  # Increased number of layers for more visible border
+        border_draw = ImageDraw.Draw(final_img)
+        for offset in range(6):
             border_draw.rectangle(
-                [(offset, offset), (1280 + border_width*2 - offset, 720 + border_width*2 - offset)],
-                outline=(0, 255, 0, 200 - offset * 30),  # Green border with decreasing opacity
+                [(offset, offset), (final_width - offset - 1, final_height - offset - 1)],
+                outline=(0, 255, 0, 200 - offset * 30),
                 width=3
             )
         
         # Add white border for extra visibility
         border_draw.rectangle(
-            [(2, 2), (1280 + border_width*2 - 2, 720 + border_width*2 - 2)],
+            [(2, 2), (final_width - 3, final_height - 3)],
             outline=(255, 255, 255, 200),
             width=2
         )
         
-        # Paste background in the center
-        bordered_bg.paste(background, (border_width, border_width))
+        # Paste the main background image
+        final_img.paste(background, (border_width, border_width))
+        
+        # Paste the glowing circle in the top-left corner
+        paste_x = border_width + 30
+        paste_y = border_width + 30
+        final_img.paste(glow_img, (paste_x - 10, paste_y - 10), glow_img)
+        
+        # Paste the circular thumbnail
+        final_img.paste(circle_output, (paste_x, paste_y), circle_output)
+        
+        # Paste the white border circle
+        final_img.paste(circle_border, (paste_x - 5, paste_y - 5), circle_border)
         
         # Add text with enhanced visibility
-        draw = ImageDraw.Draw(bordered_bg)
-        font = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 40)
-        font2 = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 70)
+        draw = ImageDraw.Draw(final_img)
+        font_title = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 60)  # Smaller title font
+        font_info = ImageFont.truetype("AviaxMusic/assets/font2.ttf", 30)   # Smaller info font
         
-        # Draw title with shadow at the bottom of the image
+        # Create a semi-transparent overlay for text background at the bottom
+        overlay_height = 150
+        overlay = Image.new('RGBA', (final_width, overlay_height), (0, 0, 0, 180))
+        final_img.paste(overlay, (0, final_height - overlay_height), overlay)
+        
+        # Draw title with shadow - position it to the right of the circular thumbnail
         title1 = truncate(title)
-        draw_text_with_shadow(bordered_bg, draw, (50, 550), title1[0], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
+        # First line of title - positioned at bottom of the image with better visibility
+        draw_text_with_shadow(
+            final_img, draw, 
+            (border_width + 40, final_height - overlay_height + 20), 
+            title1[0], font_title, 'white', 
+            shadow_offset=(3, 3), shadow_blur=5
+        )
+        
+        # Second line of title if it exists
         if title1[1]:
-            draw_text_with_shadow(bordered_bg, draw, (50, 630), title1[1], font2, 'white', shadow_offset=(3, 3), shadow_blur=7)
+            draw_text_with_shadow(
+                final_img, draw, 
+                (border_width + 40, final_height - overlay_height + 90), 
+                title1[1], font_title, 'white', 
+                shadow_offset=(3, 3), shadow_blur=5
+            )
         
-        # Add duration and channel info
-        draw_text_with_shadow(bordered_bg, draw, (50, 50), f"Duration: {duration}", font, 'white', shadow_offset=(2, 2), shadow_blur=3)
+        # Add duration info - position near the circular thumbnail
+        draw_text_with_shadow(
+            final_img, draw, 
+            (paste_x + circle_size + 30, paste_y + 20), 
+            f"Duration: {duration}", font_info, 'white', 
+            shadow_offset=(2, 2), shadow_blur=2
+        )
         
-        # Save the final image
-        bordered_bg = bordered_bg.convert("RGB")
-        bordered_bg.save(f"cache/{videoid}_v4.png")
+        # Add channel info 
+        draw_text_with_shadow(
+            final_img, draw, 
+            (paste_x + circle_size + 30, paste_y + 60), 
+            f"Channel: {channel}", font_info, 'white', 
+            shadow_offset=(2, 2), shadow_blur=2
+        )
+        
+        # Convert and save the final image
+        final_img = final_img.convert("RGB")
+        final_img.save(f"cache/{videoid}_v4.png")
+        
+        # Clean up temporary file
+        try:
+            os.remove(f"cache/thumb{videoid}.png")
+        except:
+            pass
+            
         return f"cache/{videoid}_v4.png"
     except Exception as e:
         print(f"Error in thumbnail generation: {e}")
