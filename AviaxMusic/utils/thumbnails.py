@@ -180,11 +180,12 @@ def add_green_boundary(image, border_width=6, border_color=(0, 255, 0, 255)):
     return new_image
 
 def enhance_thumbnail(image):
-    """Optimized thumbnail enhancement"""
+    """Optimized thumbnail enhancement with increased brightness and contrast"""
     enhancers = [
-        (ImageEnhance.Contrast, 1.2),
-        (ImageEnhance.Sharpness, 1.2),
-        (ImageEnhance.Brightness, 1.1)
+        (ImageEnhance.Contrast, 1.5),    # Increased from 1.2
+        (ImageEnhance.Sharpness, 1.3),   # Increased from 1.2
+        (ImageEnhance.Brightness, 1.25), # Increased from 1.1
+        (ImageEnhance.Color, 1.2)        # Added color enhancement
     ]
     
     for enhancer_class, factor in enhancers:
@@ -194,7 +195,7 @@ def enhance_thumbnail(image):
 async def gen_thumb(videoid: str):
     try:
         # Check cache first to avoid reprocessing
-        cache_path = f"cache/{videoid}_v6.png"
+        cache_path = f"cache/{videoid}_v7.png"
         if os.path.isfile(cache_path):
             # Update timestamp in cache for LRU implementation
             if videoid in processed_cache:
@@ -207,23 +208,23 @@ async def gen_thumb(videoid: str):
         
         if videoid == "telegram":
             # Create simplified thumbnail for Telegram media
-            image = Image.new("RGB", (1280, 720), (0, 0, 0))
+            image = Image.new("RGB", (1280, 720), (20, 20, 30))  # Darker blue-black background
             color = random_color()
             # Make a gradient background
-            background = generate_gradient(1280, 720, (30, 30, 30), (color[0], color[1], color[2], 150))
+            background = generate_gradient(1280, 720, (30, 30, 40), (color[0], color[1], color[2], 170))
             
             # Load a default icon
             icon_path = "assets/Telegram.png"
             if os.path.exists(icon_path):
                 icon = Image.open(icon_path)
                 # Make circular icon with enhanced border
-                icon_size = 400  # Larger icon size for better visibility
+                icon_size = 420  # Larger icon size for better visibility
                 icon = crop_center_circle(icon, icon_size)
                 # Center the icon (adjusted position to be higher up)
-                background.paste(icon, (int((1280-icon_size)/2), int((720-icon_size)/2)-70), icon)
+                background.paste(icon, (int((1280-icon_size)/2), int((720-icon_size)/2)-50), icon)
             
-            # Add enhanced green boundary
-            background = add_green_boundary(background)
+            # Add enhanced green boundary with increased visibility
+            background = add_green_boundary(background, border_width=8)
             
             # Enhance the final thumbnail
             background = enhance_thumbnail(background)
@@ -301,7 +302,14 @@ async def gen_thumb(videoid: str):
             return default_thumb
         
         # Process image for better display
-        image = Image.open(thumbnail_data)
+        try:
+            image = Image.open(thumbnail_data)
+        except Exception as e:
+            print(f"Error opening thumbnail image: {e}")
+            default_thumb = "assets/Thumbnail.jpg"
+            if not os.path.isfile(default_thumb):
+                default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+            return default_thumb
         
         # Improved image processing for better quality
         
@@ -323,65 +331,73 @@ async def gen_thumb(videoid: str):
         # Resize to standard size for consistency
         image = image.resize((1280, 720), Image.Resampling.LANCZOS)
         
-        # Enhanced image processing
+        # Apply initial enhancement to the source image
         image = enhance_thumbnail(image)
         
-        # Create a background with gradient
+        # Create a background with gradient - use darker base for better contrast
         background = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
-        color = random_color()
-        overlay = generate_gradient(1280, 720, (30, 30, 30, 220), (color[0], color[1], color[2], 80))
         
         # Blend the image with background - use a larger portion of the screen
         background.paste(image, (0, 0))
+        
+        # Add a light overlay for better text readability
+        color = random_color()
+        overlay = generate_gradient(1280, 720, (10, 10, 20, 180), (color[0], color[1], color[2], 60))
         background = Image.alpha_composite(background.convert("RGBA"), overlay)
         
-        # Add a green boundary
-        background = add_green_boundary(background)
+        # Add a green boundary with increased width for better visibility
+        background = add_green_boundary(background, border_width=8)
         
         # Use a larger portion of the screen for the image by reducing text area
         # Load logo for the profile pic - make it smaller and move it to bottom-right corner
         logo = "assets/logo.png"
         if os.path.exists(logo):
-            circle_logo = crop_center_circle(Image.open(logo), 100)  # Smaller size
-            # Position in the bottom-right corner with padding
-            background.paste(circle_logo, (1150, 600), circle_logo)
+            try:
+                logo_img = Image.open(logo)
+                circle_logo = crop_center_circle(logo_img, 110)  # Slightly larger for visibility
+                # Position in the bottom-right corner with padding
+                background.paste(circle_logo, (1140, 580), circle_logo)
+            except Exception as e:
+                print(f"Error processing logo: {e}")
         
         # Load fonts
         try:
             font_file = "assets/font2.ttf"
             font_file_bold = "assets/font2.ttf"
             
-            # Add title text with shadow - smaller and positioned better
-            title_font = ImageFont.truetype(font_file_bold, 36)  # Adjusted font size
+            # Add title text with shadow - better positioned and more visible
+            title_font = ImageFont.truetype(font_file_bold, 38)  # Larger font size for better visibility
             draw = ImageDraw.Draw(background)
             
             # Use a more compact layout for text to make image appear larger
             title_lines = truncate(title)
             
             # Position title at the top of the image for a more compact layout
-            y_position = 30
+            y_position = 25
             
-            # Add a semi-transparent overlay just for the text area in top
-            text_overlay = Image.new("RGBA", (1280, 110), (0, 0, 0, 180))
+            # Add a semi-transparent overlay just for the text area in top - darker for better contrast
+            text_overlay = Image.new("RGBA", (1280, 120), (0, 0, 0, 210))
             background.paste(text_overlay, (0, 0), text_overlay)
             
-            # Title alignment to the center
+            # Title alignment to the center with enhanced shadow
             for line in title_lines:
                 if line:
                     # Get width for center alignment
                     text_width, _ = get_text_dimensions(line, title_font)
                     x_position = (1280 - text_width) // 2
                     
-                    # Add text shadow for readability
+                    # Add text shadow for readability - larger offset and more blur
                     draw_text_with_shadow(
                         background, draw, 
                         (x_position, y_position),
-                        line, title_font, "white"
+                        line, title_font, "white",
+                        shadow_offset=(4, 4),
+                        shadow_blur=7
                     )
-                    y_position += 45
+                    y_position += 48  # Increased spacing
             
-            # Add duration text
-            duration_font = ImageFont.truetype(font_file, 28)  # Adjusted font size
+            # Add duration text with enhanced visibility
+            duration_font = ImageFont.truetype(font_file, 30)  # Larger for better visibility
             duration_text = f"Duration: {duration}"
             dur_width, _ = get_text_dimensions(duration_text, duration_font)
             x_position = (1280 - dur_width) // 2
@@ -389,7 +405,9 @@ async def gen_thumb(videoid: str):
             draw_text_with_shadow(
                 background, draw, 
                 (x_position, y_position + 5),
-                duration_text, duration_font, "white"
+                duration_text, duration_font, "white",
+                shadow_offset=(4, 4),
+                shadow_blur=7
             )
             
             # Save optimized image
@@ -397,7 +415,7 @@ async def gen_thumb(videoid: str):
                 os.makedirs("cache")
             
             background = background.convert("RGB")
-            background.save(cache_path, format="PNG", optimize=True)
+            background.save(cache_path, format="PNG", optimize=True, quality=95)  # Higher quality
             
             # Add to cache dict for LRU tracking
             processed_cache[videoid] = {"timestamp": time.time(), "path": cache_path}
@@ -424,26 +442,35 @@ async def gen_thumb(videoid: str):
             default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
         return default_thumb
 
-# Fix: Update the get_image function to handle errors better
+# Fix: Update the get_image function to handle errors better and retry on failure
 async def get_image(url):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    # Save to a temporary file
-                    temp_file = f"cache/temp_{int(time.time())}.jpg"
-                    if not os.path.exists("cache"):
-                        os.makedirs("cache")
-                    async with aiofiles.open(temp_file, "wb") as f:
-                        await f.write(data)
-                    return temp_file
-                else:
-                    print(f"Error fetching image: HTTP {resp.status}")
-                    return None
-    except Exception as e:
-        print(f"Error downloading image: {e}")
-        return None
+    attempts = 3  # Try up to 3 times
+    
+    for attempt in range(attempts):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        # Save to a temporary file
+                        temp_file = f"cache/temp_{int(time.time())}.jpg"
+                        if not os.path.exists("cache"):
+                            os.makedirs("cache")
+                        async with aiofiles.open(temp_file, "wb") as f:
+                            await f.write(data)
+                        return temp_file
+                    else:
+                        print(f"Error fetching image (attempt {attempt+1}/{attempts}): HTTP {resp.status}")
+                        if attempt == attempts - 1:  # Last attempt
+                            return None
+                        await asyncio.sleep(1)  # Wait before retrying
+        except Exception as e:
+            print(f"Error downloading image (attempt {attempt+1}/{attempts}): {e}")
+            if attempt == attempts - 1:  # Last attempt
+                return None
+            await asyncio.sleep(1)  # Wait before retrying
+    
+    return None
 
 # Clean up old thumbnails periodically
 async def cleanup_old_thumbnails():
