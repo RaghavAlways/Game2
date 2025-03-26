@@ -194,7 +194,7 @@ def enhance_thumbnail(image):
 async def gen_thumb(videoid: str):
     try:
         # Check cache first to avoid reprocessing
-        cache_path = f"cache/{videoid}_v5.png"
+        cache_path = f"cache/{videoid}_v6.png"
         if os.path.isfile(cache_path):
             # Update timestamp in cache for LRU implementation
             if videoid in processed_cache:
@@ -217,10 +217,10 @@ async def gen_thumb(videoid: str):
             if os.path.exists(icon_path):
                 icon = Image.open(icon_path)
                 # Make circular icon with enhanced border
-                icon_size = 360  # Larger icon size for better visibility
+                icon_size = 400  # Larger icon size for better visibility
                 icon = crop_center_circle(icon, icon_size)
                 # Center the icon (adjusted position to be higher up)
-                background.paste(icon, (int((1280-icon_size)/2), int((720-icon_size)/2)-50), icon)
+                background.paste(icon, (int((1280-icon_size)/2), int((720-icon_size)/2)-70), icon)
             
             # Add enhanced green boundary
             background = add_green_boundary(background)
@@ -243,9 +243,25 @@ async def gen_thumb(videoid: str):
             
             return cache_path
             
-        # Fix: Properly handle the VideosSearch coroutine
-        vs = VideosSearch(videoid, limit=1)
-        result_data = await vs.next()
+        # Fix: Properly handle the VideosSearch coroutine with timeout
+        try:
+            vs = VideosSearch(videoid, limit=1)
+            timeout_task = asyncio.create_task(asyncio.wait_for(vs.next(), 10.0))  # 10 second timeout
+            result_data = await timeout_task
+        except asyncio.TimeoutError:
+            print(f"Timeout fetching video data for {videoid}")
+            # Return default thumbnail on timeout
+            default_thumb = "assets/Thumbnail.jpg"
+            if not os.path.isfile(default_thumb):
+                default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+            return default_thumb
+        except Exception as e:
+            print(f"Error fetching video data: {e}")
+            # Return default thumbnail on error
+            default_thumb = "assets/Thumbnail.jpg"
+            if not os.path.isfile(default_thumb):
+                default_thumb = "AviaxMusic/assets/Thumbnail.jpg"
+            return default_thumb
         
         if not result_data or not result_data.get("result"):
             # Return default thumbnail if no results
@@ -315,7 +331,7 @@ async def gen_thumb(videoid: str):
         color = random_color()
         overlay = generate_gradient(1280, 720, (30, 30, 30, 220), (color[0], color[1], color[2], 80))
         
-        # Blend the image with background
+        # Blend the image with background - use a larger portion of the screen
         background.paste(image, (0, 0))
         background = Image.alpha_composite(background.convert("RGBA"), overlay)
         
@@ -323,12 +339,12 @@ async def gen_thumb(videoid: str):
         background = add_green_boundary(background)
         
         # Use a larger portion of the screen for the image by reducing text area
-        # Load logo for the profile pic - make it smaller and move it to top-left corner
+        # Load logo for the profile pic - make it smaller and move it to bottom-right corner
         logo = "assets/logo.png"
         if os.path.exists(logo):
-            circle_logo = crop_center_circle(Image.open(logo), 120)  # Smaller size
-            # Position in the top-left corner with padding
-            background.paste(circle_logo, (40, 40), circle_logo)
+            circle_logo = crop_center_circle(Image.open(logo), 100)  # Smaller size
+            # Position in the bottom-right corner with padding
+            background.paste(circle_logo, (1150, 600), circle_logo)
         
         # Load fonts
         try:
@@ -336,24 +352,26 @@ async def gen_thumb(videoid: str):
             font_file_bold = "assets/font2.ttf"
             
             # Add title text with shadow - smaller and positioned better
-            title_font = ImageFont.truetype(font_file_bold, 34)  # Reduced font size
+            title_font = ImageFont.truetype(font_file_bold, 36)  # Adjusted font size
             draw = ImageDraw.Draw(background)
             
             # Use a more compact layout for text to make image appear larger
             title_lines = truncate(title)
             
             # Position title at the top of the image for a more compact layout
-            y_position = 45
+            y_position = 30
             
-            # Add a semi-transparent overlay just for the text area in top right
-            text_overlay = Image.new("RGBA", (600, 130), (0, 0, 0, 180))
-            background.paste(text_overlay, (640, 20), text_overlay)
+            # Add a semi-transparent overlay just for the text area in top
+            text_overlay = Image.new("RGBA", (1280, 110), (0, 0, 0, 180))
+            background.paste(text_overlay, (0, 0), text_overlay)
             
-            # Title alignment to the right side
-            x_position = 680
-            
+            # Title alignment to the center
             for line in title_lines:
                 if line:
+                    # Get width for center alignment
+                    text_width, _ = get_text_dimensions(line, title_font)
+                    x_position = (1280 - text_width) // 2
+                    
                     # Add text shadow for readability
                     draw_text_with_shadow(
                         background, draw, 
@@ -363,11 +381,15 @@ async def gen_thumb(videoid: str):
                     y_position += 45
             
             # Add duration text
-            duration_font = ImageFont.truetype(font_file, 26)  # Smaller font
+            duration_font = ImageFont.truetype(font_file, 28)  # Adjusted font size
+            duration_text = f"Duration: {duration}"
+            dur_width, _ = get_text_dimensions(duration_text, duration_font)
+            x_position = (1280 - dur_width) // 2
+            
             draw_text_with_shadow(
                 background, draw, 
                 (x_position, y_position + 5),
-                f"Duration: {duration}", duration_font, "white"
+                duration_text, duration_font, "white"
             )
             
             # Save optimized image

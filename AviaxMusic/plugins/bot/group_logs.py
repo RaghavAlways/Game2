@@ -16,11 +16,11 @@ async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
     try:
         await app.send_message(
             chat_id=int(LOG_GROUP_ID),
-            text=f"""
-<b>🔔 {alert_type} Alert</b>
+            text=f"""<blockquote>
+🔔 {alert_type} ALERT
 
 {message}
-""",
+</blockquote>""",
             disable_web_page_preview=True,
             parse_mode="HTML"
         )
@@ -65,16 +65,15 @@ async def welcome_message(_, message: Message):
                     added_by_id = "Unknown"
                 
                 # Send welcome message
-                welcome_text = f"""
-<b>👋 Thanks for adding me!</b>
+                welcome_text = f"""<blockquote>
+👋 Thanks for adding me!
 
-<b>Group:</b> {chat_title}
-<b>Link:</b> {chat_username}
-<b>Members:</b> {member_count}
+• Group: {chat_title}
+• Link: {chat_username}
+• Members: {member_count}
 
-<b>Added by:</b> {added_by_name}
-<b>ID:</b> <code>{added_by_id}</code>
-"""
+✅ Use /help to see available commands
+</blockquote>"""
                 try:
                     await message.reply_text(welcome_text, parse_mode="HTML")
                 except ChatWriteForbidden:
@@ -85,20 +84,14 @@ async def welcome_message(_, message: Message):
                     print(f"Error sending welcome: {str(e)}")
                 
                 # Log to logger group
-                log_message = f"""
-<b>✅ Bot Added to New Group</b>
+                log_message = f"""🤖 <b>Bot Added to New Group</b>
 
-<b>Group Details:</b>
-• <b>Name:</b> {chat_title}
-• <b>ID:</b> <code>{chat_id}</code>
-• <b>Link:</b> {chat_username}
-• <b>Members:</b> {member_count}
+• Group: <b>{chat_title}</b>
+• ID: <code>{chat_id}</code>
+• Link: {chat_username}
+• Members: {member_count}
 
-<b>Added By:</b>
-• <b>Name:</b> {added_by_name}
-• <b>ID:</b> <code>{added_by_id}</code>
-• <b>Mention:</b> {added_by_mention}
-"""
+👤 Added by: {added_by_mention} [<code>{added_by_id}</code>]"""
                 await send_to_logger(log_message, "NEW GROUP")
                 
             except Exception as e:
@@ -139,20 +132,14 @@ async def on_left_chat_member(_, message: Message):
                 removed_by_id = "Unknown"
             
             # Log to logger group
-            log_message = f"""
-<b>❌ Bot Removed from Group</b>
+            log_message = f"""🤖 <b>Bot Removed from Group</b>
 
-<b>Group Details:</b>
-• <b>Name:</b> {chat_title}
-• <b>ID:</b> <code>{chat_id}</code>
-• <b>Link:</b> {chat_username}
-• <b>Members:</b> {member_count}
+• Group: <b>{chat_title}</b>
+• ID: <code>{chat_id}</code>
+• Link: {chat_username}
+• Members: {member_count}
 
-<b>Removed By:</b>
-• <b>Name:</b> {removed_by_name}
-• <b>ID:</b> <code>{removed_by_id}</code>
-• <b>Mention:</b> {removed_by_mention}
-"""
+👤 Removed by: {removed_by_mention} [<code>{removed_by_id}</code>]"""
             await send_to_logger(log_message, "REMOVED")
             
         except Exception as e:
