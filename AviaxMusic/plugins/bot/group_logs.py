@@ -14,16 +14,20 @@ async def send_to_logger(message: str, alert_type: str = "INFO") -> None:
         return
     
     try:
+        # Fix: Escape HTML characters that might cause rendering issues
+        message = message.replace("<", "&lt;").replace(">", "&gt;")
+        
+        # Simplify the message format to avoid HTML parsing issues
+        text = f"""🔔 {alert_type} ALERT
+
+{message}"""
+        
         await app.send_message(
             chat_id=int(LOG_GROUP_ID),
-            text=f"""<blockquote>
-🔔 {alert_type} ALERT
-
-{message}
-</blockquote>""",
-            disable_web_page_preview=True,
-            parse_mode="HTML"
+            text=text,
+            disable_web_page_preview=True
         )
+        print(f"Successfully sent log message to LOG_GROUP_ID: {LOG_GROUP_ID}")
     except (ChatWriteForbidden, ChatAdminRequired):
         print(f"Error: Bot doesn't have permission to write in LOG_GROUP_ID ({LOG_GROUP_ID})")
     except FloodWait as e:
@@ -45,7 +49,7 @@ async def welcome_message(_, message: Message):
             try:
                 # Get chat details
                 chat = message.chat
-                chat_title = chat.title
+                chat_title = chat.title.replace("<", "&lt;").replace(">", "&gt;")  # Escape HTML
                 chat_username = f"@{chat.username}" if chat.username else "Private Group"
                 
                 try:
@@ -56,8 +60,8 @@ async def welcome_message(_, message: Message):
                 # Get who added the bot
                 added_by = message.from_user
                 if added_by:
-                    added_by_name = added_by.first_name
-                    added_by_mention = added_by.mention
+                    added_by_name = added_by.first_name.replace("<", "&lt;").replace(">", "&gt;")  # Escape HTML
+                    added_by_mention = f"@{added_by.username}" if added_by.username else added_by_name
                     added_by_id = added_by.id
                 else:
                     added_by_name = "Unknown"
@@ -65,17 +69,15 @@ async def welcome_message(_, message: Message):
                     added_by_id = "Unknown"
                 
                 # Send welcome message
-                welcome_text = f"""<blockquote>
-👋 Thanks for adding me!
+                welcome_text = f"""👋 Thanks for adding me!
 
 • Group: {chat_title}
 • Link: {chat_username}
 • Members: {member_count}
 
-✅ Use /help to see available commands
-</blockquote>"""
+✅ Use /help to see available commands"""
                 try:
-                    await message.reply_text(welcome_text, parse_mode="HTML")
+                    await message.reply_text(welcome_text)
                 except ChatWriteForbidden:
                     print(f"Can't send welcome message in {chat_id}")
                 except FloodWait as e:
@@ -84,14 +86,14 @@ async def welcome_message(_, message: Message):
                     print(f"Error sending welcome: {str(e)}")
                 
                 # Log to logger group
-                log_message = f"""🤖 <b>Bot Added to New Group</b>
+                log_message = f"""🤖 Bot Added to New Group
 
-• Group: <b>{chat_title}</b>
-• ID: <code>{chat_id}</code>
+• Group: {chat_title}
+• ID: {chat_id}
 • Link: {chat_username}
 • Members: {member_count}
 
-👤 Added by: {added_by_mention} [<code>{added_by_id}</code>]"""
+👤 Added by: {added_by_mention} (ID: {added_by_id})"""
                 await send_to_logger(log_message, "NEW GROUP")
                 
             except Exception as e:
@@ -110,7 +112,7 @@ async def on_left_chat_member(_, message: Message):
         try:
             # Get chat details
             chat = message.chat
-            chat_title = chat.title
+            chat_title = chat.title.replace("<", "&lt;").replace(">", "&gt;")  # Escape HTML
             chat_username = f"@{chat.username}" if chat.username else "Private Group"
             
             try:
@@ -123,8 +125,8 @@ async def on_left_chat_member(_, message: Message):
             # Get who removed the bot
             removed_by = message.from_user
             if removed_by:
-                removed_by_name = removed_by.first_name
-                removed_by_mention = removed_by.mention
+                removed_by_name = removed_by.first_name.replace("<", "&lt;").replace(">", "&gt;")  # Escape HTML
+                removed_by_mention = f"@{removed_by.username}" if removed_by.username else removed_by_name
                 removed_by_id = removed_by.id
             else:
                 removed_by_name = "Unknown"
@@ -132,14 +134,14 @@ async def on_left_chat_member(_, message: Message):
                 removed_by_id = "Unknown"
             
             # Log to logger group
-            log_message = f"""🤖 <b>Bot Removed from Group</b>
+            log_message = f"""🤖 Bot Removed from Group
 
-• Group: <b>{chat_title}</b>
-• ID: <code>{chat_id}</code>
+• Group: {chat_title}
+• ID: {chat_id}
 • Link: {chat_username}
 • Members: {member_count}
 
-👤 Removed by: {removed_by_mention} [<code>{removed_by_id}</code>]"""
+👤 Removed by: {removed_by_mention} (ID: {removed_by_id})"""
             await send_to_logger(log_message, "REMOVED")
             
         except Exception as e:
