@@ -224,10 +224,82 @@ async def make_guess(_, message: Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     
-    # Check if there's a game in progress
-    if chat_id not in active_games:
-        await message.reply_text("<blockquote>❌ No active game. Start with /wordle</blockquote>")
-        return
+    # Check for other active games
+    try:
+        from AviaxMusic.plugins.bot.hangman import active_hangman_games
+        hangman_active = chat_id in active_hangman_games
+    except ImportError:
+        hangman_active = False
+        
+    try:
+        from AviaxMusic.plugins.bot.guess import active_guess_games
+        numguess_active = chat_id in active_guess_games
+    except ImportError:
+        numguess_active = False
+    
+    # Detect specific Wordle guess
+    wordle_active = chat_id in active_games
+    is_word_guess = False
+    
+    if len(message.command) > 1:
+        guess = message.command[1].upper()
+        # Wordle guesses are typically 5-letter words
+        if len(guess) >= 4 and guess.isalpha():
+            is_word_guess = True
+    
+    # Handle conflicts
+    multiple_games = sum([wordle_active, hangman_active, numguess_active]) > 1
+    
+    if multiple_games:
+        # If it's clearly a word guess, proceed with Wordle
+        if is_word_guess and wordle_active:
+            pass  # Continue with Wordle handling
+        # If it's not a word guess and other games are active, let them handle it
+        elif not is_word_guess and (hangman_active or numguess_active):
+            return  # Let the other handler process it
+        # If it's ambiguous, provide guidance
+        else:
+            reply = await message.reply_text(
+                "<blockquote>Multiple games are active. Specify which game:\n"
+                "• For Wordle: `/guess APPLE` (a word)\n"
+                "• For Hangman: `/guess a` (a single letter)\n"
+                "• For Number Guess: `/guess 42` (a number)</blockquote>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Games Menu", callback_data="game_menu")]
+                ])
+            )
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(reply.id)
+            asyncio.create_task(cleanup_messages(chat_id))
+            return
+    
+    # No Wordle game active
+    if not wordle_active:
+        # If it's clearly a Wordle-style guess but other games are active
+        if is_word_guess and (hangman_active or numguess_active):
+            reply = await message.reply_text(
+                "<blockquote>No active Wordle game. Start with /wordle</blockquote>",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Start Wordle", callback_data="start_wordle")]
+                ])
+            )
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(reply.id)
+            asyncio.create_task(cleanup_messages(chat_id))
+            return
+        # If it's not clearly a Wordle guess and other games are active, let them handle it
+        elif not is_word_guess and (hangman_active or numguess_active):
+            return
+        # If no games are active
+        else:
+            reply = await message.reply_text("<blockquote>❌ No active game. Start with /wordle</blockquote>")
+            if chat_id not in game_messages:
+                game_messages[chat_id] = []
+            game_messages[chat_id].append(reply.id)
+            asyncio.create_task(cleanup_messages(chat_id))
+            return
     
     # Check if user is a player
     if user_id not in active_games[chat_id]["players"]:

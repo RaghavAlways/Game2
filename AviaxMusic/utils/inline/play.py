@@ -33,8 +33,8 @@ def track_markup(_, videoid, user_id, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="Play Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
             InlineKeyboardButton(
                 text="🎬 Get Direct Movie 🎬",
@@ -105,8 +105,8 @@ def stream_markup_timer(_, videoid, chat_id, played, dur):
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
         ],
     ]
@@ -167,8 +167,8 @@ def telegram_markup_timer(_, chat_id, played, dur):
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
         ],
     ]
@@ -209,8 +209,8 @@ def stream_markup(_, videoid=None, chat_id=None):
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
         ],
     ]
@@ -241,8 +241,8 @@ def telegram_markup(_, chat_id):
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
         ],
     ]
@@ -263,8 +263,8 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
             InlineKeyboardButton(
                 text="🍿 Movie",
@@ -289,8 +289,8 @@ def livestream_markup(_, videoid, user_id, mode, channel, fplay):
         ],
         [
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
             InlineKeyboardButton(
                 text="🍿 Movie",
@@ -338,8 +338,8 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
                 url="https://t.me/LB_Movies"
             ),
             InlineKeyboardButton(
-                text="🎮 Game",
-                callback_data="start_wordle",
+                text="🎮 Games",
+                callback_data="game_menu",
             ),
         ],
     ]
