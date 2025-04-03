@@ -19,6 +19,7 @@ channeldb = mongodb.cplaymode
 countdb = mongodb.upcount
 gbansdb = mongodb.gban
 langdb = mongodb.language
+loggerdb = mongodb.logger
 onoffdb = mongodb.onoffper
 playmodedb = mongodb.playmode
 playtypedb = mongodb.playtypedb
@@ -42,7 +43,26 @@ pause = {}
 playmode = {}
 playtype = {}
 skipmode = {}
+logger = False
 
+# Logger functions
+async def is_logger() -> bool:
+    logger_status = await loggerdb.find_one({"logger": 1})
+    if not logger_status:
+        return False
+    return True
+
+async def logger_on():
+    is_on = await is_logger()
+    if is_on:
+        return
+    return await loggerdb.insert_one({"logger": 1})
+
+async def logger_off():
+    is_on = await is_logger()
+    if not is_on:
+        return
+    return await loggerdb.delete_one({"logger": 1})
 
 async def get_assistant_number(chat_id: int) -> str:
     assistant = assistantdict.get(chat_id)
